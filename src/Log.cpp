@@ -1,5 +1,5 @@
 #include "Log.hpp"
-
+#include "Engine/EdenConfig.hpp"
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 

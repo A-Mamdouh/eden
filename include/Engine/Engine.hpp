@@ -7,8 +7,6 @@
 #include <memory>
 #include <string>
 
-#include "Engine/EdenConfig.hpp"
-
 namespace Eden
 {
 

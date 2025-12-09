@@ -1,3 +1,4 @@
+#include "Engine/EdenConfig.hpp"
 #include "Engine/Camera.hpp"
 #include "Engine/Renderer.hpp"
 #include "Engine/Window.hpp"
@@ -10,7 +11,6 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
-#include <span>
 #include <string>
 #include <utility>
 #include <vector>

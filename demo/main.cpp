@@ -1,6 +1,6 @@
 #include <memory>
 #include <spdlog/spdlog.h>
-#include "Engine/Eden.hpp"
+#include <Engine/Eden.hpp>
 #include "scenes/demo.cpp"
 
 class DemoApplication : public Eden::Application

@@ -1,4 +1,4 @@
-#include "Engine/Eden.hpp"
+#include <Engine/Eden.hpp>
 #include "../scripts/PlayerController.cpp"
 
 class DemoScene : public Eden::EcsScene

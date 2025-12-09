@@ -3,8 +3,6 @@
 #ifndef EDEN_ENGINE_LOG_HPP
 #define EDEN_ENGINE_LOG_HPP
 
-#include "Engine/EdenConfig.hpp"
-
 #include <cstdlib>
 #include <memory>
 #include <spdlog/spdlog.h>
