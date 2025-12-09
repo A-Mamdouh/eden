@@ -5,6 +5,7 @@ out/
 # CMake cache and files
 CMakeFiles/
 CMakeCache.txt
+.cache/
 cmake-build-*/
 
 # Compiled shaders
