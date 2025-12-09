@@ -1,4 +1,5 @@
 #include "Engine/Application.hpp"
+#include "Log.hpp"
 
 namespace Eden
 {

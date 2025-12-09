@@ -1,7 +1,7 @@
 #include "Engine/Camera.hpp"
-#include "Engine/Log.hpp"
 #include "Engine/Renderer.hpp"
 #include "Engine/Window.hpp"
+#include "Log.hpp"
 
 #include <algorithm>
 #include <array>

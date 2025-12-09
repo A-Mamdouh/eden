@@ -1,6 +1,6 @@
 #include <memory>
+#include <spdlog/spdlog.h>
 #include "Engine/Eden.hpp"
-#include "Engine/Log.hpp"
 #include "scenes/demo.cpp"
 
 class DemoApplication : public Eden::Application
@@ -21,6 +21,6 @@ int main()
     config.title = "Eden Demo";
     DemoApplication app(config);
 
-    EDEN_CORE_INFO("Demo application initialized; entering run loop");
+    spdlog::info("Demo application initialized; entering run loop");
     return app.run();
 }

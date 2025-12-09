@@ -16,6 +16,8 @@ namespace Eden
  * Central logging facility for the engine.
  *
  * Wraps spdlog so that the rest of the codebase only depends on this header.
+ * This header is intentionally private to the engine; consumers should not
+ * rely on it.
  */
 class Log
 {

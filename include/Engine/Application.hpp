@@ -5,7 +5,6 @@
 
 #include "Engine/Engine.hpp"
 #include "Engine/Scene.hpp"
-#include "Engine/Log.hpp"
 
 #include <memory>
 

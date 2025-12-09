@@ -14,6 +14,8 @@ target_include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}/../include
         ${EDEN_ENGINE_CONFIG_INCLUDE_DIR}
         ${CMAKE_BINARY_DIR}/_deps/entt-src/src
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 target_compile_features(Eden PUBLIC cxx_std_20)

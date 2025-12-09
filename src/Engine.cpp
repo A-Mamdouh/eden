@@ -1,10 +1,10 @@
 #include "Engine/Engine.hpp"
 
-#include "Engine/Renderer.hpp"
-#include "Engine/Log.hpp"
-#include "Engine/Window.hpp"
 #include "Engine/Input.hpp"
+#include "Engine/Renderer.hpp"
 #include "Engine/Scene.hpp"
+#include "Engine/Window.hpp"
+#include "Log.hpp"
 
 #include <chrono>
 #include <thread>

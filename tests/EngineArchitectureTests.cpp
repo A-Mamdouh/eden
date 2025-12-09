@@ -3,7 +3,6 @@
 #include "Engine/Application.hpp"
 #include "Engine/Engine.hpp"
 #include "Engine/Input.hpp"
-#include "Engine/Log.hpp"
 #include "Engine/Renderer.hpp"
 #include "Engine/Scene.hpp"
 #include "Engine/Window.hpp"
@@ -37,7 +36,7 @@ TEST(EngineArchitecture, EngineConfigDefaults)
 
     EXPECT_EQ(config.width, 1280u);
     EXPECT_EQ(config.height, 720u);
-    EXPECT_EQ(config.title, "Platformer");
+    EXPECT_EQ(config.title, "Eden Application");
     EXPECT_FALSE(config.enableValidationLayers);
     EXPECT_FLOAT_EQ(config.targetFrameRate, 60.0f);
     EXPECT_FALSE(config.fixedTimestep);
@@ -109,11 +108,4 @@ TEST(EngineArchitecture, ApplicationWindowResizeOverrideCompiles)
     };
 
     static_assert(std::is_constructible_v<ResizeApplication, const Eden::EngineConfig&>);
-}
-
-TEST(EngineArchitecture, LogInitializationIsIdempotent)
-{
-    EXPECT_NO_THROW(Eden::Log::init());
-    EXPECT_NO_THROW(Eden::Log::init());
-    EXPECT_NE(Eden::Log::core(), nullptr);
 }

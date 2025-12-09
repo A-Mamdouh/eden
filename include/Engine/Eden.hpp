@@ -10,7 +10,6 @@
 #include "Engine/Engine.hpp"
 #include "Engine/Entity.hpp"
 #include "Engine/Input.hpp"
-#include "Engine/Log.hpp"
 #include "Engine/Material.hpp"
 #include "Engine/Renderer.hpp"
 #include "Engine/RenderSystem.hpp"

@@ -1,7 +1,7 @@
 #include "Engine/Window.hpp"
 
 #include "Engine/Input.hpp"
-#include "Engine/Log.hpp"
+#include "Log.hpp"
 
 #include <SDL.h>
 

@@ -1,4 +1,5 @@
 #include "Engine/Eden.hpp"
+#include <spdlog/spdlog.h>
 
 class PlayerControllerScript : public Eden::ScriptBehaviour
 {
@@ -42,7 +43,7 @@ public:
     void onEnd(Eden::Entity entity) override
     {
         (void)entity;
-        EDEN_CORE_INFO("PlayerControllerScript ended");
+        spdlog::info("PlayerControllerScript ended");
     }
 
 private:
