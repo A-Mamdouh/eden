@@ -1,0 +1,20 @@
+# Build directories
+build/
+out/
+
+# CMake cache and files
+CMakeFiles/
+CMakeCache.txt
+cmake-build-*/
+
+# Compiled shaders
+shaders/*.spv
+
+# IDE metadata
+.vscode/
+.idea/
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
