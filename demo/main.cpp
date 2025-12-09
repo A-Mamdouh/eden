@@ -18,6 +18,7 @@ protected:
 int main()
 {
     Eden::EngineConfig config;
+    config.title = "Eden Demo";
     DemoApplication app(config);
 
     EDEN_CORE_INFO("Demo application initialized; entering run loop");

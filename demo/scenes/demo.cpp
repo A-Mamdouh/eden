@@ -11,7 +11,6 @@ public:
 
     void onAttach() override
     {
-        EDEN_CORE_INFO("DemoScene attached");
         scriptSystem_.setContext(Eden::ScriptContext{&input_, nullptr, this});
 
         // Triangle entity.
@@ -37,7 +36,6 @@ public:
 
     void onDetach() override
     {
-        EDEN_CORE_INFO("DemoScene detached");
         scriptSystem_.shutdown(registry());
     }
 
@@ -69,11 +67,6 @@ public:
             auto& transform = view.get<Eden::Transform>(entityId);
             (void)transform;
             // In a real game we would update transform, scripts, etc.
-        }
-
-        if (input_.wasKeyPressed(Eden::KeyCode::Escape))
-        {
-            EDEN_CORE_INFO("Escape pressed");
         }
 
         scriptSystem_.updateScripts(registry(), deltaTime);

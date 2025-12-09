@@ -20,7 +20,7 @@ struct EngineConfig
 {
     unsigned int width{1280};
     unsigned int height{720};
-    std::string title{"Platformer"};
+    std::string title{"Eden Application"};
     bool enableValidationLayers{false};
 
     // Time-step configuration
