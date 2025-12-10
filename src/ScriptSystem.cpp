@@ -6,6 +6,12 @@ namespace Eden
 void ScriptSystem::setContext(const ScriptContext& context)
 {
     context_ = context;
+    if (context_.projectToScreen == nullptr && context_.scene)
+    {
+        context_.projectToScreen = [scene = context_.scene](const Vec3& world) {
+            return scene->projectToScreen(world);
+        };
+    }
 }
 
 void ScriptSystem::updateScripts(Registry& registry, float deltaTime)

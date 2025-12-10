@@ -10,6 +10,7 @@ namespace Eden
 {
 
 using Vec3 = glm::vec3;
+using Vec4 = glm::vec4;
 using Mat4 = glm::mat4;
 
 inline Mat4 makePerspective(float fovYRadians, float aspect, float nearPlane, float farPlane) noexcept

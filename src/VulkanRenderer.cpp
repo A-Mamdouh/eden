@@ -298,7 +298,12 @@ public:
   void setCamera(const Camera &camera) override {
     camera_ = camera;
     viewProjection_ = camera_.projection * camera_.view;
+    hasCamera_ = true;
   }
+
+  bool hasCamera() const override { return hasCamera_; }
+
+  const Camera& getCamera() const override { return camera_; }
 
   void clear(const Color &color) override { clearColor_ = color; }
 
@@ -951,6 +956,7 @@ private:
 
   Color clearColor_{0.0f, 0.0f, 0.0f, 1.0f};
   Camera camera_{};
+  bool hasCamera_{false};
   Mat4 viewProjection_{Mat4(1.0f)};
   Mat4 clipSpaceCorrection_{makeClipSpaceCorrection()};
   vk::PipelineLayout pipelineLayout_{};

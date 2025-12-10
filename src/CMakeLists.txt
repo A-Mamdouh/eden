@@ -3,6 +3,7 @@ add_library(Eden STATIC
     Engine.cpp
     Input.cpp
     Log.cpp
+    Physics2D.cpp
     ScriptSystem.cpp
     VulkanRenderer.cpp
     Window.cpp
@@ -27,15 +28,15 @@ target_compile_definitions(
 )
 
 target_link_libraries(Eden PUBLIC glm::glm)
+target_include_directories(Eden PRIVATE ${chipmunk_SOURCE_DIR}/include)
 
 target_link_libraries(
     Eden
     PRIVATE
         spdlog::spdlog
         SDL2::SDL2
+        Vulkan::Vulkan
+        ${EDEN_CHIPMUNK_TARGET}
 )
 
-if (Vulkan_FOUND)
-    target_link_libraries(Eden PRIVATE Vulkan::Vulkan)
-    target_compile_definitions(Eden PRIVATE EDEN_ENABLE_VULKAN)
-endif()
+target_compile_definitions(Eden PRIVATE EDEN_ENABLE_VULKAN)

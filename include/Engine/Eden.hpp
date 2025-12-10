@@ -3,6 +3,7 @@
 #ifndef EDEN_ENGINE_EDEN_HPP
 #define EDEN_ENGINE_EDEN_HPP
 
+#include "Engine/EdenConfig.hpp"
 #include "Engine/Application.hpp"
 #include "Engine/Camera.hpp"
 #include "Engine/Components.hpp"
@@ -11,6 +12,7 @@
 #include "Engine/Entity.hpp"
 #include "Engine/Input.hpp"
 #include "Engine/Material.hpp"
+#include "Engine/Physics.hpp"
 #include "Engine/Renderer.hpp"
 #include "Engine/RenderSystem.hpp"
 #include "Engine/Scene.hpp"

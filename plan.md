@@ -34,28 +34,14 @@ High-level TODO list for building out the engine around the existing `Scene` cla
 - [x] Integrate entities/components with the `Scene` class.
 - [x] Provide update hooks for game logic (per-frame update on entities/components).
 
-## 6. Physics / Collision (Basic)
-- [ ] Implement simple 2D/3D colliders (AABB, circle/sphere, etc.).
-- [ ] Implement basic collision detection (overlap tests).
-- [ ] Add a simple physics/update step (movement, basic responses).
-- [ ] Expose physics data to gameplay code.
-
-### Immediate plan for Physics / Collision
-1. Define foundational physics components:
-   - `Rigidbody` (mass, velocity, damping, flags) for anything that moves.
-   - Shape-specific collider components (`AabbCollider`, `CircleCollider`) storing extents/offsets.
-2. Author a lightweight `PhysicsWorld` service:
-   - Maintains a list of active bodies/colliders pulled from the ECS each frame.
-   - Steps bodies with semi-implicit Euler integration (apply gravity + velocity).
-3. Collision detection routines:
-   - Overlap tests for AABB-vs-AABB and AABB-vs-Circle (2D focus first).
-   - Produce simple contact info (penetration vector) for resolution.
-4. Collision resolution system:
-   - Separate overlapping bodies by penetration.
-   - Basic response hooks (`onCollisionEnter/Stay` callbacks on scripts or events).
-5. ECS integration:
-   - A `PhysicsSystem` that runs before rendering, syncing transforms back to the ECS.
-   - Optional `PhysicsDebugRenderer` to visualize collider bounds via the renderer.
+## 6. Physics / Collision (ChipmunkCPP-first)
+- [ ] Integrate Chipmunk as the 2D backend behind a physics facade so a 3D backend can be added later.
+- [ ] Define physics components: `Rigidbody2D` (dynamic/kinematic/static, mass, damping, CCD flag), `Collider2D` (box/circle/capsule/polygon, offset, sensor flag, material: friction/restitution), optional `PhysicsMaterial`.
+- [ ] Implement systems: `PhysicsSystem2D` (sync ECS → Box2D, fixed timestep step with optional substeps/CCD, sync back), `PhysicsDebugDraw` (render shapes/contacts).
+- [ ] Contact handling: custom contact listener for filtering and events (begin/end, pre-solve) to drive gameplay (grounded, one-way platforms, coyote/buffered jumps).
+- [ ] Queries: expose raycast/shape cast/AABB queries via the facade for ground checks, ledge grabs, line-of-sight.
+- [ ] Tuning for precision platformer: fixed timestep (e.g., 120 Hz) with optional substeps; enable CCD on fast movers/player; capsule/rounded-rect player shape; low/no restitution; friction mostly handled in gameplay; slope limit and snap-to-ground; velocity clamps.
+- [ ] Extensibility: keep shape/fixture enums and math dimension-agnostic (glm), consistent units/time control, so a 3D backend (e.g., Jolt/Bullet) can slot in without changing gameplay code.
 
 ## 7. Asset & Resource Management
 - [ ] Implement a `ResourceManager` for loading/caching textures, shaders, meshes.

@@ -62,6 +62,11 @@ protected:
     Engine& getEngine() noexcept { return engine_; }
     const Engine& getEngine() const noexcept { return engine_; }
 
+    /**
+     * Request the application to quit at the end of the current frame.
+     */
+    void requestQuit() noexcept { engine_.stop(); }
+
 private:
     Engine engine_;
 };

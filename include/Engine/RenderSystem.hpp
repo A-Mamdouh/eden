@@ -25,6 +25,26 @@ public:
 
     void render(Registry& registry, Renderer& renderer) const
     {
+        // Ensure an active camera is set if available.
+        bool cameraSet = false;
+        auto cameras = registry.view<CameraComponent>();
+        for (auto entityId : cameras)
+        {
+            const auto& cam = cameras.get<CameraComponent>(entityId);
+            if (cam.primary)
+            {
+                renderer.setCamera(cam.camera);
+                cameraSet = true;
+                break;
+            }
+        }
+        if (!cameraSet && !cameras.empty())
+        {
+            const auto first = *cameras.begin();
+            const auto& cam = cameras.get<CameraComponent>(first);
+            renderer.setCamera(cam.camera);
+        }
+
         std::unordered_map<EntityId, Mat4> worldCache;
         auto view = registry.view<Transform, Renderable>();
         for (auto entityId : view)

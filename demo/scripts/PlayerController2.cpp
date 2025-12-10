@@ -1,10 +1,10 @@
 #include <Engine/Eden.hpp>
 #include <spdlog/spdlog.h>
 
-class PlayerControllerScript : public Eden::ScriptBehaviour
+class PlayerControllerScript2 : public Eden::ScriptBehaviour
 {
 public:
-    PlayerControllerScript() = default;
+    PlayerControllerScript2() = default;
 
     void onStart(Eden::Entity entity) override
     {
@@ -19,26 +19,18 @@ public:
         }
 
         auto& rigidbody = entity.getComponent<Eden::Rigidbody2D>();
-        const float speed = 4.0f;
-
+        auto& transform = entity.getComponent<Eden::Transform>();
+        const float speed = 3e-3f;
+        
         Eden::Vec2 delta{0.0f, 0.0f};
-
-        if (input->isKeyDown(Eden::KeyCode::A))
-        {
-            delta.x -= speed * deltaTime;
+        if(!context().projectToScreen) {
+            spdlog::info("Project to screen is null");
+            return;
         }
-        if (input->isKeyDown(Eden::KeyCode::D))
-        {
-            delta.x += speed * deltaTime;
-        }
-        if (input->isKeyDown(Eden::KeyCode::W))
-        {
-            delta.y += speed * deltaTime;
-        }
-        if (input->isKeyDown(Eden::KeyCode::S))
-        {
-            delta.y -= speed * deltaTime;
-        }
+        const auto& screenPosition = context().projectToScreen(transform.position);
+        
+        delta.x = (input->mouseX() - screenPosition.x) * speed;
+        delta.y = (screenPosition.y - input->mouseY()) * speed;
 
         // Accumulate translation directly on the rigidbody; physics will apply it pre-step.
         if (delta.x != 0.0f || delta.y != 0.0f)
@@ -51,7 +43,7 @@ public:
 
     void onEnd(Eden::Entity entity) override
     {
-        spdlog::info("PlayerControllerScript ended");
+        spdlog::info("PlayerControllerScript22 ended");
     }
 
 private:

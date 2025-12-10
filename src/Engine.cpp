@@ -25,9 +25,19 @@ namespace
             void endFrame() override {}
             void resize(unsigned int, unsigned int) override {}
             void setViewport(const Viewport&) override {}
-            void setCamera(const Camera&) override {}
+            void setCamera(const Camera& camera) override
+            {
+                camera_ = camera;
+                hasCamera_ = true;
+            }
+            bool hasCamera() const override { return hasCamera_; }
+            const Camera& getCamera() const override { return camera_; }
             void clear(const Color&) override {}
             void submitDrawCommand(PrimitiveShape, const DrawParams&) override {}
+
+        private:
+            Camera camera_{};
+            bool hasCamera_{false};
         };
 
         EDEN_CORE_WARN("Using NullRenderer (no graphics backend available)");
@@ -96,6 +106,7 @@ void Engine::setScene(std::unique_ptr<Scene> scene)
 
     if (impl_->scene)
     {
+        impl_->scene->setQuitHandler([this]() { stop(); });
         impl_->scene->onAttach();
 
         // Ensure the scene is aware of the current window size.
@@ -160,8 +171,8 @@ void Engine::run()
             }
         }
 
-        auto now = clock::now();
-        std::chrono::duration<float> delta = now - lastTime;
+        const auto now = clock::now();
+        const std::chrono::duration<float> delta = now - lastTime;
         lastTime = now;
 
         const float frameDelta = delta.count();

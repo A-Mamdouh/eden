@@ -4,14 +4,20 @@
 #define EDEN_ENGINE_SCRIPT_HPP
 
 #include <memory>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
+#include "Engine/Camera.hpp"
 #include "Engine/Entity.hpp"
-#include "Engine/Renderer.hpp"
 #include "Engine/Input.hpp"
+#include "Engine/Renderer.hpp"
 #include "Engine/Scene.hpp"
 
 namespace Eden
 {
+
+    using Vec2 = glm::vec2;
+    using Vec3 = glm::vec3;
 
 /**
  * Base class for gameplay scripts attached to ECS entities.
@@ -24,6 +30,12 @@ struct ScriptContext
     Input* input{nullptr};
     Renderer* renderer{nullptr};
     Scene* scene{nullptr};
+    // Optional utility to project world positions to screen pixels.
+    std::function<Vec2(const Vec3&)> projectToScreen{};
+    // Current viewport size in pixels.
+    Vec2 viewportPixels{0.0f, 0.0f};
+    // Optional utility to unproject screen pixels to world space (e.g., plane hits).
+    std::function<Vec3(const Vec2& /*screenPx*/, float /*targetZ*/)> screenToWorld{};
 };
 
 class ScriptBehaviour

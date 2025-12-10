@@ -26,6 +26,12 @@ struct Renderable
     PrimitiveShape shape{PrimitiveShape::Triangle};
 };
 
+struct CameraComponent
+{
+    Camera camera{};
+    bool primary{true}; // If true, requests to become the active camera.
+};
+
 } // namespace Eden
 
 #endif // EDEN_ENGINE_COMPONENTS_HPP

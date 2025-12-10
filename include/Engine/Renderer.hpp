@@ -86,6 +86,16 @@ public:
     virtual void setCamera(const Camera& camera) = 0;
 
     /**
+     * Query whether a camera is currently set/valid.
+     */
+    virtual bool hasCamera() const = 0;
+
+    /**
+     * Get the currently active camera (undefined if hasCamera() is false).
+     */
+    virtual const Camera& getCamera() const = 0;
+
+    /**
      * Clear the current frame with the given color.
      * Actual drawing backends will implement this.
      */
