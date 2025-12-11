@@ -100,33 +100,6 @@ if (NOT glm_FOUND)
     FetchContent_MakeAvailable(glm)
 endif()
 
-set(EDEN_CHIPMUNK_TARGET "")
-if (NOT DEFINED CHIPMUNK_VERSION)
-    set(CHIPMUNK_VERSION Chipmunk-7.0.3)
-endif()
-set(CHIPMUNK_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
-set(CHIPMUNK_ENABLE_DEMOS OFF CACHE BOOL "" FORCE)
-set(CHIPMUNK_ENABLE_PROFILER OFF CACHE BOOL "" FORCE)
-set(CHIPMUNK_ENABLE_SHARED OFF CACHE BOOL "" FORCE)
-set(CHIPMUNK_ENABLE_DOCS OFF CACHE BOOL "" FORCE)
-
-include(FetchContent)
-FetchContent_Declare(
-    chipmunk
-    GIT_REPOSITORY https://github.com/slembcke/Chipmunk2D.git
-    GIT_TAG ${CHIPMUNK_VERSION}
-)
-FetchContent_MakeAvailable(chipmunk)
-
-if (TARGET chipmunk_static)
-    set(EDEN_CHIPMUNK_TARGET chipmunk_static)
-elseif (TARGET chipmunk)
-    set(EDEN_CHIPMUNK_TARGET chipmunk)
-else()
-    message(FATAL_ERROR "Chipmunk target not found after fetch")
-endif()
-set(EDEN_CHIPMUNK_TARGET ${EDEN_CHIPMUNK_TARGET} CACHE INTERNAL "Chipmunk target for Eden")
-
 # find_package(assimp QUIET)
 # if (NOT assimp_FOUND)
 #     if (NOT DEFINED ASSIMP_VERSION)
@@ -171,11 +144,11 @@ endif()
 
 # Directory for generated config headers
 set(EDEN_ENGINE_CONFIG_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/include")
-file(MAKE_DIRECTORY "${EDEN_ENGINE_CONFIG_INCLUDE_DIR}/Engine")
+file(MAKE_DIRECTORY "${EDEN_ENGINE_CONFIG_INCLUDE_DIR}")
 
 configure_file(
-    ${CMAKE_CURRENT_LIST_DIR}/include/Engine/EdenConfig.hpp.in
-    ${EDEN_ENGINE_CONFIG_INCLUDE_DIR}/Engine/EdenConfig.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/include/Eden/EdenConfig.hpp.in
+    ${EDEN_ENGINE_CONFIG_INCLUDE_DIR}/Eden/EdenConfig.hpp
     @ONLY
 )
 

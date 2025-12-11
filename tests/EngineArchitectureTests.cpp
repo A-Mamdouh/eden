@@ -1,11 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "Engine/Application.hpp"
-#include "Engine/Engine.hpp"
-#include "Engine/Input.hpp"
-#include "Engine/Renderer.hpp"
-#include "Engine/Scene.hpp"
-#include "Engine/Window.hpp"
+#include "Eden.hpp"
 
 #include <type_traits>
 
@@ -34,12 +29,13 @@ TEST(EngineArchitecture, EngineConfigDefaults)
 {
     Eden::EngineConfig config;
 
-    EXPECT_EQ(config.width, 1280u);
-    EXPECT_EQ(config.height, 720u);
-    EXPECT_EQ(config.title, "Eden Application");
-    EXPECT_FALSE(config.enableValidationLayers);
-    EXPECT_FLOAT_EQ(config.targetFrameRate, 60.0f);
-    EXPECT_FALSE(config.fixedTimestep);
+    EXPECT_EQ(config.window.width, 1280u);
+    EXPECT_EQ(config.window.height, 720u);
+    EXPECT_EQ(config.window.title, "Eden");
+    EXPECT_TRUE(config.window.resizable);
+    EXPECT_FALSE(config.render.enableValidationLayers);
+    EXPECT_FLOAT_EQ(config.render.targetFrameRate, 60.0f);
+    EXPECT_FALSE(config.render.fixedTimestep);
 }
 
 TEST(EngineArchitecture, SceneIsNonCopyableAndNonMovable)

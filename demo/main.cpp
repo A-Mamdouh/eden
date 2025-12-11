@@ -1,26 +1,33 @@
 #include <memory>
 #include <spdlog/spdlog.h>
-#include <Engine/Eden.hpp>
-#include "scenes/demo.cpp"
+#include <Eden/Eden.hpp>
+#include "scenes/demo.hpp"
 
 class DemoApplication : public Eden::Application
 {
 public:
     using Eden::Application::Application;
 
+    DemoApplication(Eden::EngineConfig& config)
+    : Application(config)
+    {}
+
 protected:
     std::unique_ptr<Eden::Scene> createInitialScene() override
     {
-        return std::make_unique<DemoScene>(getEngine().getInput());
+        return std::make_unique<Eden::DemoScene>();
     }
 };
 
 int main()
 {
     Eden::EngineConfig config;
-    config.title = "Eden Demo";
-    DemoApplication app(config);
+    config.window.title = "Eden Demo";
+    config.render.enableValidationLayers = true;
+    config.render.targetFrameRate = 144;
+    auto app = std::make_unique<DemoApplication>(config);
+    Eden::Application::setInstance(std::move(app));
 
     spdlog::info("Demo application initialized; entering run loop");
-    return app.run();
+    return Eden::Application::getInstance().run();
 }

@@ -1,12 +1,17 @@
 add_library(Eden STATIC
-    Application.cpp
-    Engine.cpp
-    Input.cpp
-    Log.cpp
-    Physics2D.cpp
-    ScriptSystem.cpp
-    VulkanRenderer.cpp
-    Window.cpp
+    core/Application.cpp
+    core/Configuration.cpp
+    core/Engine.cpp
+    core/EventSystem.cpp
+    core/Log.cpp
+    core/Scene.cpp
+    core/SceneManager.cpp
+    platform/Input.cpp
+    platform/Platform.cpp
+    platform/Window.cpp
+    render/RenderSystem.cpp
+    render/VulkanRenderer.cpp
+    script/ScriptSystem.cpp
 )
 
 target_include_directories(
@@ -28,7 +33,6 @@ target_compile_definitions(
 )
 
 target_link_libraries(Eden PUBLIC glm::glm)
-target_include_directories(Eden PRIVATE ${chipmunk_SOURCE_DIR}/include)
 
 target_link_libraries(
     Eden
@@ -36,7 +40,6 @@ target_link_libraries(
         spdlog::spdlog
         SDL2::SDL2
         Vulkan::Vulkan
-        ${EDEN_CHIPMUNK_TARGET}
 )
 
 target_compile_definitions(Eden PRIVATE EDEN_ENABLE_VULKAN)

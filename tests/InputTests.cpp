@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "Engine/Input.hpp"
+#include "Eden/platform/Input.hpp"
 
 TEST(InputSystem, KeyboardPressReleaseLifecycle)
 {
@@ -63,4 +63,3 @@ TEST(InputSystem, MouseButtonsAndPosition)
     EXPECT_FALSE(input.wasMouseButtonPressed(Eden::MouseButton::Left));
     EXPECT_TRUE(input.wasMouseButtonReleased(Eden::MouseButton::Left));
 }
-
