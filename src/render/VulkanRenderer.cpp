@@ -1,4 +1,4 @@
-#include "EdenConfig.hpp"
+#include <Eden/EdenConfig.hpp>
 #include "Eden/ecs/CameraComponent.hpp"
 #include "Eden/ecs/EntityHierarchyComponent.hpp"
 #include "Eden/ecs/RenderableComponent.hpp"

@@ -1,6 +1,6 @@
 #include "core/Log.hpp"
 
-#include "EdenConfig.hpp"
+#include <Eden/EdenConfig.hpp>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
