@@ -8,10 +8,6 @@ class DemoApplication : public Eden::Application
 public:
     using Eden::Application::Application;
 
-    DemoApplication(Eden::EngineConfig& config)
-    : Application(config)
-    {}
-
 protected:
     std::unique_ptr<Eden::Scene> createInitialScene() override
     {
@@ -21,13 +17,13 @@ protected:
 
 int main()
 {
-    Eden::EngineConfig config;
-    config.window.title = "Eden Demo";
-    config.render.enableValidationLayers = true;
-    config.render.targetFrameRate = 144;
-    auto app = std::make_unique<DemoApplication>(config);
-    Eden::Application::setInstance(std::move(app));
+    Eden::AppConfig config;
+    config.engine.window.title = "Eden Demo";
+    config.engine.render.enableValidationLayers = true;
+    config.engine.render.targetFrameRate = 144;
+
+    DemoApplication app(config);
 
     spdlog::info("Demo application initialized; entering run loop");
-    return Eden::Application::getInstance().run();
+    return app.run();
 }

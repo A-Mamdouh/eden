@@ -3,16 +3,10 @@
 #include <Eden/ecs/TransformComponent.hpp>
 #include <Eden/render/Renderer.hpp>
 #include <Eden/script/Script.hpp>
-#include <Eden/core/Application.hpp>
-#include <glm/geometric.hpp>
-#include <spdlog/spdlog.h>
 
 class PlayerInput : public Eden::ScriptBehaviour {
 
     void onUpdate(Eden::Entity entity, float deltaTime) override {
-        if(context().input->isKeyDown(Eden::KeyCode::Escape)) {
-            context().application->exit();
-        }
         Eden::Vec2 delta{0.0f, 0.0f};
         if(context().input->isKeyDown(Eden::KeyCode::A)) {
             delta.x -= 1;
@@ -43,7 +37,6 @@ class PlayerInput : public Eden::ScriptBehaviour {
             .a = 1.0f
         };
         renderer.clear(color);
-        // spdlog::info("New color: {}, {}, {}", color.r, color.g, color.b);
     }
 
     private:

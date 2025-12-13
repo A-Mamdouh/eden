@@ -1,6 +1,4 @@
 add_executable(EdenTests
-    EngineArchitectureTests.cpp
-    InputTests.cpp
 )
 
 target_link_libraries(

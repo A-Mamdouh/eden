@@ -1,17 +1,9 @@
 add_library(Eden STATIC
-    core/Application.cpp
-    core/Configuration.cpp
-    core/Engine.cpp
-    core/EventSystem.cpp
-    core/Log.cpp
-    core/Scene.cpp
-    core/SceneManager.cpp
-    platform/Input.cpp
-    platform/Platform.cpp
-    platform/Window.cpp
-    render/RenderSystem.cpp
-    render/VulkanRenderer.cpp
-    script/ScriptSystem.cpp
+    Services/IService.cpp
+    Services/ConfigService/ConfigService.cpp
+    Services/JobService/JobService.cpp
+    Services/SceneService/Scene.cpp
+    Services/SceneService/SceneService.cpp
 )
 
 target_include_directories(
