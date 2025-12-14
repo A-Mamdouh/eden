@@ -1,4 +1,5 @@
 add_executable(EdenTests
+    smoke_test.cpp
 )
 
 target_link_libraries(

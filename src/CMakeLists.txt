@@ -1,9 +1,14 @@
 add_library(Eden STATIC
+    Core/Engine.cpp
     Services/IService.cpp
+    Services/ClockService/ClockService.cpp
     Services/ConfigService/ConfigService.cpp
     Services/JobService/JobService.cpp
     Services/SceneService/Scene.cpp
     Services/SceneService/SceneService.cpp
+    Systems/ISystem.cpp
+    Systems/RenderSystem/RenderSystem.cpp
+    Systems/RenderSystem/Vulkan/VulkanRenderer.cpp
 )
 
 target_include_directories(

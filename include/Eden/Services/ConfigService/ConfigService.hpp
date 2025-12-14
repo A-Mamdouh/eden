@@ -10,8 +10,10 @@ namespace Eden {
       ConfigService(const Config::ApplicationConfig &config): config_{config} {}
       std::string getName() override { return "Config Service"; }
       void update(const Config::ApplicationConfig& newconfig);
+      const Config::ApplicationConfig& get() const { return config_; }
 
     private:
+      void onInit() override {}
       Config::ApplicationConfig config_;
   };
 

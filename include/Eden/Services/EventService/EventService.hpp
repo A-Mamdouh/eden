@@ -7,6 +7,9 @@
 #include <cstddef>
 #include <functional>
 #include <typeindex>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace Eden {
 
@@ -37,6 +40,7 @@ public:
   void publish(const EventType &event) const;
 
 private:
+  void onInit() override {}
   struct Listener {
     ListenerId id;
     std::function<void(const void *)> invoker;

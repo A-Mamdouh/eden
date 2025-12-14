@@ -1,11 +1,14 @@
 #pragma once
 #include "Eden/Services/IService.hpp"
 
-#include "functional"
-#include "queue"
-#include "thread"
+#include <atomic>
 #include <condition_variable>
+#include <cstddef>
+#include <functional>
 #include <mutex>
+#include <queue>
+#include <thread>
+#include <vector>
 
 namespace Eden {
 

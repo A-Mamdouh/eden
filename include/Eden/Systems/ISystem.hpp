@@ -8,7 +8,7 @@ namespace Eden {
 class EventService;
 
 /**
- * Services are decoupled from the engine main loop.
+ * Systems are driven by the engine main loop.
  */
 class ISystem {
 public:
@@ -16,7 +16,8 @@ public:
 
   void init(std::weak_ptr<const EventService> eventService);
   virtual std::string getName() = 0;
-  virtual void update() = 0;
+  virtual void update(double dt) = 0;
+  virtual void shutdown() = 0;
 
   virtual ~ISystem() = default;
   ISystem(const ISystem &) = delete;
@@ -32,6 +33,6 @@ private:
 };
 
 template <typename T>
-concept is_service_type = std::is_base_of_v<ISystem, T>;
+concept is_system_type = std::is_base_of_v<ISystem, T>;
 
 } // namespace Eden

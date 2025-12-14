@@ -10,6 +10,7 @@ namespace Eden {
 class ClockService : public IService {
 
 public:
+  explicit ClockService(Config::ClockConfig clockConfig = {}) : clockConfig_{clockConfig} {}
   std::string getName() override { return "Clock Service"; }
 
       // Called once per engine loop
@@ -26,7 +27,7 @@ public:
 
     // Control
     void setPaused(bool paused);
-    bool isPaused();
+    bool isPaused() const;
     void setTimeScale(double scale);
 
 protected:
@@ -41,7 +42,7 @@ private:
   double simTimeTotal_ = {0.0f};
   double realTimeTotal_ = {0.0f};
   bool paused_{false};
-  Config::Clock clockConfig_;
+  Config::ClockConfig clockConfig_;
 };
 
 } // namespace Eden

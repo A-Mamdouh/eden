@@ -14,6 +14,7 @@ public:
   void loadScene(std::unique_ptr<Scene> scene);
 
 private:
+  void onInit() override {}
   std::unique_ptr<Scene> activeScene_{nullptr};
 };
 

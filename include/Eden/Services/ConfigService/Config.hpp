@@ -3,36 +3,38 @@
 #include <string>
 
 namespace Eden::Config {
-  struct WindowConfig {
-  int height;
-  int width;
-  bool fullscreen;
-  bool resizable;
-  std::string title;
+struct WindowConfig {
+  int width{1280};
+  int height{720};
+  bool fullscreen{false};
+  bool resizable{true};
+  std::string title{"Eden"};
 };
 
-struct RendererConfig {
-  bool enableValidation{true};
+struct RenderConfig {
+  bool enableValidationLayers{false};
   float targetFrameRate{60.0f};
-  bool enableMaxFPS{true};
+  bool enableMaxFPS{false};
 };
 
 struct JobServiceConfig {
   int numWorkers{4};
 };
 
-struct Clock {
-  double fixedDt = 1.0f / 60.0f; // Simulation step
-  double maxFrameDt = 0.25f; // Clamp (anti-spiral)
-  double timeScale = 1.0f; // Slow-mo
+struct ClockConfig {
+  double fixedDt{1.0 / 60.0};    // Simulation step
+  double maxFrameDt{0.25};       // Clamp (anti-spiral)
+  double timeScale{1.0};         // Slow-mo
 };
 
 struct EngineConfig {
-  WindowConfig window;
-  RendererConfig renderer;
+  WindowConfig window{};
+  RenderConfig render{};
+  ClockConfig clock{};
+  JobServiceConfig jobs{};
 };
 
 struct ApplicationConfig {
-  EngineConfig engine;
+  EngineConfig engine{};
 };
-}
+} 

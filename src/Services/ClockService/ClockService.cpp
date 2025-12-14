@@ -1,6 +1,10 @@
 #include "Eden/Services/ClockService/ClockService.hpp"
 
+#include <algorithm>
+
 namespace Eden {
+
+void ClockService::onInit() { lastTick_ = Clock::now(); }
 
 double ClockService::tick() {
   auto now = Clock::now();
@@ -30,4 +34,18 @@ bool ClockService::consumeFixedStep() {
   }
   return false;
 }
+
+double ClockService::fixedDt() const { return clockConfig_.fixedDt; }
+
+double ClockService::frameDt() const { return frameDelta_; }
+
+double ClockService::simTime() const { return simTimeTotal_; }
+
+double ClockService::realTime() const { return realTimeTotal_; }
+
+void ClockService::setPaused(bool paused) { paused_ = paused; }
+
+bool ClockService::isPaused() const { return paused_; }
+
+void ClockService::setTimeScale(double scale) { clockConfig_.timeScale = scale; }
 } // namespace Eden

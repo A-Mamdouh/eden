@@ -1,3 +1,5 @@
+#pragma once
+
 #include "Eden/Events/IEvent.hpp"
 #include "IService.hpp"
 #include <string>
