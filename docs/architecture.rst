@@ -67,9 +67,12 @@ touches any other subsystem.
 
 Components today: ``Transform`` (local position/rotation/scale),
 ``EntityHierarchy`` (optional parent link), ``WorldTransform`` (computed,
-see below), and ``Renderable`` (a symbolic ``PrimitiveShape`` plus tint --
-entities reference a shape, not a raw mesh handle, so scene-authored
-content doesn't need to know a mesh was already uploaded to the GPU).
+see below), ``Camera`` (view/projection source for rendering), and
+``Renderable`` (a ``MeshHandle`` plus a ``MaterialHandle`` -- both created
+via :cpp:func:`Eden::Engine::createMesh` /
+:cpp:func:`Eden::Engine::createMaterial`). An optional ``TintOverride``
+component lets a script animate one entity's color without mutating a
+Material other entities may share.
 
 :cpp:class:`Eden::TransformSystem` is the only writer of
 ``WorldTransform``: every frame it walks entities with a ``Transform``,
@@ -88,7 +91,7 @@ every ``ScriptComponent`` each frame: the first tick calls ``onStart()``,
 every tick (including that first one) calls ``onUpdate(entity, dt)``.
 Both hooks receive the owning :cpp:class:`Eden::Entity`, so a script
 reads/writes its own components the same way any other code does --
-``entity.getComponent<Renderable>().tint = ...``, for example.
+``entity.getComponent<TintOverride>().tint = ...``, for example.
 
 Deliberately minimal for now: a script only ever sees its own entity and
 ``dt``, nothing else (no input, no querying other entities, no access to
@@ -97,34 +100,54 @@ react to, so this hasn't been a real limitation so far; when one is
 needed, it can be added as a further argument to ``onUpdate`` without
 breaking existing scripts.
 
-``demo/scripts/PulseTint.hpp`` is the reference example: it animates a
-``Renderable``'s tint through a ``sin(time)`` pulse, which is what the
-demo's quad used to do as hardcoded logic inside ``RenderSystem`` before
-the scene system existed.
+``demo/scripts/PulseTint.hpp`` is the reference example: it animates an
+entity's color through a ``sin(time)`` pulse by writing a
+``TintOverride``, which is what the demo's quad used to do as hardcoded
+logic inside ``RenderSystem`` before the scene system existed.
 
 Rendering
 ---------
 
 :cpp:class:`Eden::Renderer` is the backend-agnostic contract:
-:cpp:func:`Eden::Renderer::createMesh`, :cpp:func:`Eden::Renderer::renderFrame`,
-:cpp:func:`Eden::Renderer::requestResize`. No Vulkan/Metal/D3D12 type may
-appear in this interface or in :cpp:struct:`Eden::RenderFrame` /
-:cpp:struct:`Eden::DrawCommand` -- a backend receives a plain frame
-description (camera + draw commands referencing mesh handles) and knows
-nothing about how the scene was built.
+:cpp:func:`Eden::Renderer::createMesh`, :cpp:func:`Eden::Renderer::createTexture`,
+:cpp:func:`Eden::Renderer::renderFrame`, :cpp:func:`Eden::Renderer::requestResize`.
+No Vulkan/Metal/D3D12 type may appear in this interface or in
+:cpp:struct:`Eden::RenderFrame` / :cpp:struct:`Eden::DrawCommand` -- a
+backend receives a plain frame description (camera + draw commands
+referencing mesh/texture handles) and knows nothing about how the scene
+was built. An invalid/unset texture handle on a ``DrawCommand`` draws
+with the backend's own 1x1 white texture, so untextured and textured
+draws go through the same shader path.
 
 :cpp:class:`Eden::RenderSystem` owns the SDL window and the active
 ``Renderer`` instance, pumps SDL events each frame, and walks the active
 Scene's ``Renderable``/``WorldTransform`` entities to build each
 ``RenderFrame`` -- ``Renderer`` itself never sees ECS/entt types. It also
-owns a tiny built-in primitive mesh library (currently a triangle and a
-quad) that ``Renderable::shape`` resolves against; there is no real
-asset-loading system yet.
+owns Material storage: :cpp:func:`Eden::Engine::createMaterial` stores a
+``Material`` (texture + tint + useVertexColor) and hands back a
+``MaterialHandle`` a ``Renderable`` references; RenderSystem resolves it
+into a ``DrawCommand``'s texture/tint/useVertexColor each frame.
+
+:cpp:func:`Eden::Engine::loadModel` is the real asset-loading path: it
+parses a glTF/GLB file (via the vendored ``cgltf``/``stb_image``
+single-header libraries), uploads its meshes and textures through
+``RenderSystem``, creates a ``Material`` per glTF material, and spawns
+one entity per glTF node -- ``Transform`` + ``EntityHierarchy`` mirroring
+the node hierarchy, plus a ``Renderable`` on nodes with a mesh -- into
+the active scene. Node rotations (glTF quaternions) are converted to
+``Transform::rotationEuler`` via a quaternion decomposition, which is
+fine for typical authored content but can lose precision or hit gimbal
+lock for extreme rotations. The demo still uploads a couple of
+hand-built primitive meshes directly via :cpp:func:`Eden::Engine::createMesh`
+alongside a loaded model, showing both paths side by side.
 
 The Vulkan backend is implemented against this contract; see the
 Vulkan-specific header/source under ``src/Systems/RenderSystem/Vulkan/``
 for current status rather than trusting this page to stay in sync on
-backend internals. :cpp:class:`Eden::NullRenderer` is a second, headless
+backend internals -- at a glance, it has a depth buffer (device-local
+image, second render-pass attachment) and a full texture pipeline
+(staging buffer, device-local image, sampler, one descriptor set per
+texture). :cpp:class:`Eden::NullRenderer` is a second, headless
 implementation -- no window, no GPU, no graphics API calls -- that
 exists to prove the contract is genuinely backend-agnostic and to give
 the test suite (below) something to construct a ``Renderer`` against
@@ -162,22 +185,29 @@ Testing
 ``tests/`` is GoogleTest-based and runs via ``ctest``. Coverage today:
 ``EventService`` pub/sub, ``ClockService`` timing/pause/scale behavior,
 ``Scene``/``Entity``/component round-tripping, ``TransformSystem``'s
-hierarchy composition, ``ScriptSystem``'s start/update contract, and
-``NullRenderer``'s handle lifecycle -- all pure logic, none of it needs
-a window or GPU, which is what makes it possible to run in CI without a
-display or real Vulkan driver (see ``.github/workflows/ci.yml``, which
-still needs the Vulkan SDK installed to *build* ``VulkanRenderer.cpp``
-and link the loader, just not to run these tests).
+hierarchy composition, ``ScriptSystem``'s start/update contract,
+``NullRenderer``'s mesh/texture handle lifecycle, and
+``RenderSystem``'s Material handle lifecycle (constructed without
+calling ``init()``, so no real window/GPU is ever touched) -- all pure
+logic, none of it needs a window or GPU, which is what makes it possible
+to run in CI without a display or real Vulkan driver (see
+``.github/workflows/ci.yml``, which still needs the Vulkan SDK installed
+to *build* ``VulkanRenderer.cpp`` and link the loader, just not to run
+these tests). The glTF loader itself has no dedicated unit tests yet --
+it's exercised end-to-end by loading ``demo/assets/quad.gltf`` in the
+demo, not by an automated test.
 
 Known gaps
 ----------
 
-- No real asset loading: ``RenderSystem``'s primitive mesh library is
-  hardcoded C++, not loaded from a file format.
-- No camera component yet -- ``RenderSystem`` currently renders with an
-  identity view/projection regardless of scene content.
 - No ``InputSystem`` yet, so scripts can't react to keyboard/mouse --
-  see the Scripting section above.
+  see the Scripting section above. Also blocks the free-fly camera the
+  demo is meant to grow next: ``Camera`` is deliberately not yet coupled
+  to ``Transform``/``WorldTransform`` in anticipation of that.
+- The glTF loader supports triangle-list primitives with POSITION +
+  TEXCOORD_0 and a base-color texture/factor -- no skinning/animation,
+  vertex normals, multi-UV materials, or other PBR texture slots
+  (metallic-roughness, normal, emissive, ...) yet.
 - Windowing goes through SDL2 (already cross-platform: Windows, Linux,
   and Apple Silicon macOS). Vulkan itself has no native macOS driver and
   requires MoltenVK via the LunarG Vulkan SDK; ``CMakeLists.txt``'s

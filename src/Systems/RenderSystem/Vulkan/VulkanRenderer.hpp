@@ -37,6 +37,9 @@ public:
   MeshHandle createMesh(const MeshDesc &desc) override;
   void destroyMesh(MeshHandle handle) override;
 
+  TextureHandle createTexture(const TextureDesc &desc) override;
+  void destroyTexture(TextureHandle handle) override;
+
   void renderFrame(const RenderFrame &frame) override;
   void requestResize(std::uint32_t width, std::uint32_t height) override;
 
@@ -57,6 +60,21 @@ private:
     bool alive{false};
   };
 
+  /// GPU-side storage for one createTexture() call. Same slot+generation
+  /// reuse scheme as GpuMesh.
+  struct GpuTexture {
+    vk::Image image{};
+    vk::DeviceMemory memory{};
+    vk::ImageView view{};
+    /// Pre-bound to `image`'s view and the shared textureSampler_; handed
+    /// straight to vkCmdBindDescriptorSets at draw time.
+    vk::DescriptorSet descriptorSet{};
+    /// Mirrors the generation of the TextureHandle that owns this slot.
+    std::uint32_t generation{0};
+    /// False for a freed slot awaiting reuse by a future createTexture().
+    bool alive{false};
+  };
+
   /// Runs every step below in order, once, from the constructor.
   void initVulkan();
   /// Creates instance_, enabling validation layers if requested and available.
@@ -73,8 +91,30 @@ private:
   void createSwapchain();
   /// Creates one image view per entry in swapchainImages_.
   void createImageViews();
-  /// Creates renderPass_ (single color attachment, clear/store).
+  /// @return A depthFormat_-eligible format supported by physicalDevice_
+  ///         for optimal-tiling depth-stencil attachments; throws if none is.
+  vk::Format findDepthFormat() const;
+  /// Creates depthImage_/depthImageMemory_/depthImageView_, sized to
+  /// swapchainExtent_. Device-local (not host-visible): never written
+  /// from the CPU, only cleared/tested by the GPU each frame.
+  void createDepthResources();
+  /// Creates renderPass_ (color attachment + depth attachment, clear/store).
   void createRenderPass();
+  /// Creates descriptorSetLayout_: one combined-image-sampler binding,
+  /// fragment stage, matching `layout(binding = 0) uniform sampler2D` in
+  /// triangle.frag.
+  void createDescriptorSetLayout();
+  /// Creates textureSampler_: linear filtering, repeat addressing --
+  /// reasonable defaults for glTF textures, not currently configurable
+  /// per-texture.
+  void createTextureSampler();
+  /// Creates descriptorPool_, sized for kMaxTextures combined-image-sampler
+  /// descriptor sets (see its comment for why a fixed cap).
+  void createDescriptorPool();
+  /// Uploads a 1x1 opaque white texture and stores it as
+  /// defaultTexture_, so draws with no texture set still go through the
+  /// texture-sampling path in the fragment shader.
+  void createDefaultTexture();
   /// (Re)builds the fixed triangle/quad pipeline from the precompiled
   /// triangle.vert/frag SPIR-V under EDEN_SHADER_DIR. Destroys any
   /// existing pipeline/layout first, so it's safe to call again on
@@ -118,6 +158,21 @@ private:
   /// Maps `memory`, copies `size` bytes from `data`, unmaps. `memory`
   /// must be host-visible/coherent (i.e. from createBuffer()).
   void uploadToBuffer(vk::DeviceMemory memory, const void *data, vk::DeviceSize size) const;
+
+  /// Allocates and begins a primary command buffer from commandPool_ for
+  /// a one-shot transfer; caller submits it via endSingleTimeCommands().
+  vk::CommandBuffer beginSingleTimeCommands() const;
+  /// Ends, submits to graphicsQueue_, waits idle, and frees `commandBuffer`.
+  /// Simple (blocking) but fine for the low-frequency createTexture() path.
+  void endSingleTimeCommands(vk::CommandBuffer commandBuffer) const;
+  /// Records a pipeline barrier moving `image` from `oldLayout` to
+  /// `newLayout`; only supports the two transitions createTexture() needs
+  /// (undefined -> transferDstOptimal, transferDstOptimal -> shaderReadOnlyOptimal).
+  void transitionImageLayout(vk::CommandBuffer commandBuffer, vk::Image image,
+                             vk::ImageLayout oldLayout, vk::ImageLayout newLayout) const;
+  /// Records a buffer-to-image copy of a full `width` x `height` region.
+  void copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer buffer, vk::Image image,
+                         std::uint32_t width, std::uint32_t height) const;
   /// @param filename Shader binary name relative to EDEN_SHADER_DIR.
   /// @return SPIR-V words, or empty on any I/O failure (logged, not thrown).
   std::vector<std::uint32_t> loadShaderBinary(const std::string &filename) const;
@@ -127,6 +182,9 @@ private:
   /// @return The live GpuMesh for `handle`, or nullptr if it's invalid,
   ///         out of range, destroyed, or from a reused (stale) slot.
   const GpuMesh *findMesh(MeshHandle handle) const;
+  /// @return The live GpuTexture for `handle`, or nullptr if it's invalid,
+  ///         out of range, destroyed, or from a reused (stale) slot.
+  const GpuTexture *findTexture(TextureHandle handle) const;
 
   SDL_Window *window_{nullptr};
   bool enableValidationLayers_{false};
@@ -149,6 +207,17 @@ private:
 
   vk::RenderPass renderPass_{};
   std::vector<vk::Framebuffer> swapchainFramebuffers_{};
+
+  vk::Format depthFormat_{};
+  vk::Image depthImage_{};
+  vk::DeviceMemory depthImageMemory_{};
+  vk::ImageView depthImageView_{};
+
+  vk::DescriptorSetLayout descriptorSetLayout_{};
+  vk::Sampler textureSampler_{};
+  // Fixed-size pool (see createDescriptorPool()'s comment); not resized as
+  // textures come and go.
+  vk::DescriptorPool descriptorPool_{};
 
   vk::PipelineLayout pipelineLayout_{};
   vk::Pipeline graphicsPipeline_{};
@@ -174,6 +243,13 @@ private:
   // that has since been reused by a different mesh.
   std::vector<GpuMesh> meshes_{};
   std::vector<std::uint32_t> freeMeshSlots_{};
+
+  // Same slot+generation scheme, for textures.
+  std::vector<GpuTexture> textures_{};
+  std::vector<std::uint32_t> freeTextureSlots_{};
+  /// 1x1 white texture created by createDefaultTexture(); recordCommandBuffer()
+  /// falls back to this when a DrawCommand's texture handle doesn't resolve.
+  TextureHandle defaultTexture_{};
 };
 
 } // namespace Eden

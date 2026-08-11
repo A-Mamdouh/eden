@@ -10,6 +10,8 @@
 
 #include <spdlog/spdlog.h>
 
+#include <stdexcept>
+
 namespace Eden {
 
 Engine::Engine(const Config::ApplicationConfig &appConfig) : config_{appConfig} {
@@ -74,6 +76,30 @@ void Engine::stop() { running_ = false; }
 void Engine::loadScene(std::unique_ptr<Scene> scene) {
   sceneService_->loadScene(std::move(scene));
 }
+
+void Engine::loadModel(const std::string &path) {
+  Scene *scene = sceneService_->activeScene();
+  if (!scene) {
+    throw std::runtime_error("Engine::loadModel() requires an active scene; call loadScene() first");
+  }
+  renderSystem_->loadModel(path, *scene);
+}
+
+MeshHandle Engine::createMesh(const MeshDesc &desc) { return renderSystem_->createMesh(desc); }
+
+void Engine::destroyMesh(MeshHandle handle) { renderSystem_->destroyMesh(handle); }
+
+TextureHandle Engine::createTexture(const TextureDesc &desc) {
+  return renderSystem_->createTexture(desc);
+}
+
+void Engine::destroyTexture(TextureHandle handle) { renderSystem_->destroyTexture(handle); }
+
+MaterialHandle Engine::createMaterial(const Material &desc) {
+  return renderSystem_->createMaterial(desc);
+}
+
+void Engine::destroyMaterial(MaterialHandle handle) { renderSystem_->destroyMaterial(handle); }
 
 void Engine::shutdown() {
   if (!eventService_) {

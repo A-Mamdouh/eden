@@ -24,9 +24,16 @@ Renderer types
 Renderable component
 ---------------------
 
-.. doxygenenum:: Eden::PrimitiveShape
-
 .. doxygenstruct:: Eden::Renderable
+   :members:
+
+.. doxygenstruct:: Eden::TintOverride
+   :members:
+
+Material
+--------
+
+.. doxygenstruct:: Eden::Material
    :members:
 
 Script components
@@ -48,6 +55,16 @@ this generated reference -- its header lives in ``src/``, not
 public API surface at all, and Doxygen only scans ``include/Eden``. See
 the source directly, or the "Backend header firewall" section of
 :doc:`../architecture` for why it's organized this way.
+
+glTF loading
+------------
+
+``Engine::loadModel()`` (documented above under Core) is the public
+entry point; the cgltf/stb_image-based implementation
+(``src/Systems/RenderSystem/GltfLoader.cpp``) is intentionally outside
+this reference for the same reason as the Vulkan backend -- it's a
+private implementation detail (``RenderSystem::loadModel()``, not part
+of ``include/Eden``), not something a consumer is meant to reach into.
 
 NullRenderer
 ------------

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Eden/Services/ConfigService/Config.hpp"
+#include "Eden/Systems/RenderSystem/Material.hpp"
+#include "Eden/Systems/RenderSystem/RendererTypes.hpp"
 
 #include <memory>
 #include <vector>
@@ -41,6 +43,37 @@ public:
   /// never touches SceneService directly.
   /// @param scene New active scene; the previous one, if any, is destroyed.
   void loadScene(std::unique_ptr<Scene> scene);
+
+  /// Loads a glTF/GLB file's meshes, textures, and materials, and spawns
+  /// entities mirroring its node hierarchy into the active scene.
+  /// @param path Path to a .gltf or .glb file.
+  /// @throws std::runtime_error if there's no active scene (call
+  ///         loadScene() first), or on any parse/load failure.
+  void loadModel(const std::string &path);
+
+  /// Forwards to RenderSystem's owned Renderer; the embedding application
+  /// creates meshes this way instead of touching RenderSystem/Renderer
+  /// directly.
+  /// @param desc Vertex/index data to upload; only needs to stay valid
+  ///        for the duration of this call.
+  MeshHandle createMesh(const MeshDesc &desc);
+  /// @param handle Handle previously returned by createMesh(); a stale
+  ///        or already-destroyed handle silently no-ops.
+  void destroyMesh(MeshHandle handle);
+
+  /// Forwards to RenderSystem's owned Renderer.
+  /// @param desc Texel data to upload; only needs to stay valid for the
+  ///        duration of this call.
+  TextureHandle createTexture(const TextureDesc &desc);
+  /// @param handle Handle previously returned by createTexture(); a stale
+  ///        or already-destroyed handle silently no-ops.
+  void destroyTexture(TextureHandle handle);
+
+  /// Forwards to RenderSystem's material storage; see Material.hpp.
+  MaterialHandle createMaterial(const Material &desc);
+  /// @param handle Handle previously returned by createMaterial(); a
+  ///        stale or already-destroyed handle silently no-ops.
+  void destroyMaterial(MaterialHandle handle);
 
 private:
   /// Constructs and initializes EventService, ConfigService,

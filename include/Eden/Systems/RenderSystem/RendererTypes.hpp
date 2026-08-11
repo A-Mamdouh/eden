@@ -31,6 +31,11 @@ struct MeshTag {};
 /// Handle to a GPU mesh resource created via Renderer::createMesh().
 using MeshHandle = Handle<MeshTag>;
 
+/// Tag type for TextureHandle; never instantiated.
+struct TextureTag {};
+/// Handle to a GPU texture resource created via Renderer::createTexture().
+using TextureHandle = Handle<TextureTag>;
+
 /// RGBA color in [0, 1] per channel; not gamma-corrected.
 struct Color {
   /// Red channel.
@@ -51,6 +56,8 @@ struct Vertex {
   Vec3 position{};
   /// Per-vertex color; only used when a DrawCommand sets useVertexColor.
   Color color{};
+  /// Texture coordinates; origin top-left, u right, v down.
+  Vec2 uv{};
 };
 
 /// Describes a mesh to upload via Renderer::createMesh(). Spans only need
@@ -60,6 +67,18 @@ struct MeshDesc {
   std::span<const Vertex> vertices;
   /// Optional index buffer; empty means draw `vertices` directly in order.
   std::span<const std::uint32_t> indices{};
+};
+
+/// Describes a texture to upload via Renderer::createTexture(). `pixels`
+/// only needs to stay valid for that call.
+struct TextureDesc {
+  /// Width in texels.
+  std::uint32_t width{0};
+  /// Height in texels.
+  std::uint32_t height{0};
+  /// Tightly packed RGBA8 texel data, row-major top-to-bottom;
+  /// `width * height * 4` bytes.
+  std::span<const std::uint8_t> pixels;
 };
 
 /// View and projection matrices for one frame; glm convention (Y-up),
@@ -83,6 +102,10 @@ struct DrawCommand {
   /// True: use each vertex's own Vertex::color. False: use `tint` for
   /// the whole mesh.
   bool useVertexColor{true};
+  /// Texture to sample; invalid (the default) draws with a backend-owned
+  /// 1x1 white texture, so untextured draws still go through the same
+  /// texture * (vertex color or tint) shading path.
+  TextureHandle texture{};
 };
 
 /// Everything Renderer::renderFrame() needs for one frame. Renderer never

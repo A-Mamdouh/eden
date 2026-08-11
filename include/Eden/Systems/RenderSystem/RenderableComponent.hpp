@@ -1,27 +1,26 @@
 #pragma once
 
+#include "Eden/Systems/RenderSystem/Material.hpp"
 #include "Eden/Systems/RenderSystem/RendererTypes.hpp"
 
 namespace Eden {
 
-/// One of RenderSystem's small built-in primitive meshes. Stand-in for
-/// real asset loading: scene-authored entities reference a shape
-/// symbolically instead of a Renderer MeshHandle, so they don't need to
-/// know a mesh was already uploaded via Renderer::createMesh().
-enum class PrimitiveShape {
-  Triangle,
-  Quad,
-};
-
 /// Marks an entity for RenderSystem to draw each frame, using its
 /// WorldTransform (computed by TransformSystem) as the model matrix.
 struct Renderable {
-  /// Which of RenderSystem's built-in meshes to draw this entity as.
-  PrimitiveShape shape{PrimitiveShape::Triangle};
-  /// Flat color used in place of per-vertex color when useVertexColor is false.
+  /// Mesh to draw; created via Engine::createMesh() (or a model loader).
+  MeshHandle mesh{};
+  /// Shading parameters; created via Engine::createMaterial(). An invalid
+  /// handle draws with Material's defaults (white tint, vertex color).
+  MaterialHandle material{};
+};
+
+/// Optional per-entity override for Material::tint, and forces
+/// useVertexColor off while present. Lets a script animate one entity's
+/// color (e.g. a pulse) without creating a new Material or mutating the
+/// shared one other entities may reference.
+struct TintOverride {
   Color tint{1.0f, 1.0f, 1.0f, 1.0f};
-  /// True: use the mesh's own per-vertex color. False: use `tint`.
-  bool useVertexColor{true};
 };
 
 } // namespace Eden

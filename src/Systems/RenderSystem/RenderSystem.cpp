@@ -4,12 +4,13 @@
 #include "Eden/Services/SceneService/Scene.hpp"
 #include "Eden/Services/SceneService/SceneService.hpp"
 #include "Eden/Systems/RenderSystem/Renderer.hpp"
+#include "Systems/RenderSystem/GltfLoader.hpp"
 #include "Systems/RenderSystem/Vulkan/VulkanRendererFactory.hpp"
 
 #include <SDL.h>
+#include <glm/gtc/matrix_transform.hpp>
 #include <spdlog/spdlog.h>
 
-#include <array>
 #include <stdexcept>
 #include <utility>
 
@@ -43,38 +44,98 @@ void RenderSystem::onInit() {
     throw std::runtime_error(SDL_GetError());
   }
 
+  windowWidth_ = windowConfig_.width;
+  windowHeight_ = windowConfig_.height;
+
   renderer_ = createVulkanRenderer(window_, renderConfig_.enableValidationLayers);
-
-  createPrimitiveMeshes();
 }
 
-void RenderSystem::createPrimitiveMeshes() {
-  const std::array<Vertex, 3> triangleVertices{
-      Vertex{Vec3{0.0f, 0.5f, 0.0f}, Color{1.0f, 0.0f, 0.0f, 1.0f}},
-      Vertex{Vec3{0.5f, -0.5f, 0.0f}, Color{0.0f, 1.0f, 0.0f, 1.0f}},
-      Vertex{Vec3{-0.5f, -0.5f, 0.0f}, Color{0.0f, 0.0f, 1.0f, 1.0f}},
-  };
-  triangleMesh_ = renderer_->createMesh(MeshDesc{triangleVertices});
+MeshHandle RenderSystem::createMesh(const MeshDesc &desc) { return renderer_->createMesh(desc); }
 
-  const std::array<Vertex, 6> quadVertices{
-      Vertex{Vec3{-0.5f, 0.5f, 0.0f}, Color{1.0f, 1.0f, 1.0f, 1.0f}},
-      Vertex{Vec3{0.5f, 0.5f, 0.0f}, Color{1.0f, 1.0f, 1.0f, 1.0f}},
-      Vertex{Vec3{0.5f, -0.5f, 0.0f}, Color{1.0f, 1.0f, 1.0f, 1.0f}},
-      Vertex{Vec3{0.5f, -0.5f, 0.0f}, Color{1.0f, 1.0f, 1.0f, 1.0f}},
-      Vertex{Vec3{-0.5f, -0.5f, 0.0f}, Color{1.0f, 1.0f, 1.0f, 1.0f}},
-      Vertex{Vec3{-0.5f, 0.5f, 0.0f}, Color{1.0f, 1.0f, 1.0f, 1.0f}},
-  };
-  quadMesh_ = renderer_->createMesh(MeshDesc{quadVertices});
+void RenderSystem::destroyMesh(MeshHandle handle) { renderer_->destroyMesh(handle); }
+
+TextureHandle RenderSystem::createTexture(const TextureDesc &desc) {
+  return renderer_->createTexture(desc);
 }
 
-MeshHandle RenderSystem::resolvePrimitive(PrimitiveShape shape) const {
-  switch (shape) {
-  case PrimitiveShape::Triangle:
-    return triangleMesh_;
-  case PrimitiveShape::Quad:
-    return quadMesh_;
+void RenderSystem::destroyTexture(TextureHandle handle) { renderer_->destroyTexture(handle); }
+
+MaterialHandle RenderSystem::createMaterial(const Material &desc) {
+  MaterialSlot slot{};
+  slot.material = desc;
+  slot.alive = true;
+
+  std::uint32_t index{};
+  if (!freeMaterialSlots_.empty()) {
+    index = freeMaterialSlots_.back();
+    freeMaterialSlots_.pop_back();
+    slot.generation = materials_[index].generation + 1;
+    materials_[index] = slot;
+  } else {
+    index = static_cast<std::uint32_t>(materials_.size());
+    slot.generation = 1;
+    materials_.push_back(slot);
   }
-  return {};
+
+  return MaterialHandle{index + 1, materials_[index].generation};
+}
+
+void RenderSystem::destroyMaterial(MaterialHandle handle) {
+  if (!handle.valid()) {
+    return;
+  }
+  const std::uint32_t index = handle.id - 1;
+  if (index >= materials_.size()) {
+    return;
+  }
+
+  MaterialSlot &slot = materials_[index];
+  if (!slot.alive || slot.generation != handle.generation) {
+    return;
+  }
+
+  slot.alive = false;
+  freeMaterialSlots_.push_back(index);
+}
+
+void RenderSystem::loadModel(const std::string &path, Scene &scene) {
+  loadGltfModel(path, *this, scene);
+}
+
+const Material *RenderSystem::resolveMaterial(MaterialHandle handle) const {
+  if (!handle.valid()) {
+    return nullptr;
+  }
+  const std::uint32_t index = handle.id - 1;
+  if (index >= materials_.size()) {
+    return nullptr;
+  }
+  const MaterialSlot &slot = materials_[index];
+  if (!slot.alive || slot.generation != handle.generation) {
+    return nullptr;
+  }
+  return &slot.material;
+}
+
+CameraDesc RenderSystem::resolveCamera(Scene &scene) const {
+  const float aspect = windowHeight_ > 0
+                            ? static_cast<float>(windowWidth_) / static_cast<float>(windowHeight_)
+                            : 1.0f;
+
+  auto &registry = scene.getRegistry();
+  for (const auto entity : registry.view<Camera>()) {
+    const auto &camera = registry.get<Camera>(entity);
+    if (!camera.active) {
+      continue;
+    }
+    return CameraDesc{camera.viewMatrix(), camera.projectionMatrix(aspect)};
+  }
+
+  // No active Camera entity: fall back to an aspect-corrected orthographic
+  // projection (identity view) instead of a bare identity projection, so
+  // scenes authored without a Camera still render undistorted and fully in
+  // view regardless of window aspect ratio.
+  return CameraDesc{Mat4{1.0f}, glm::ortho(-aspect, aspect, -1.0f, 1.0f, -1.0f, 1.0f)};
 }
 
 RenderFrame RenderSystem::buildFrameFromScene() const {
@@ -86,16 +147,28 @@ RenderFrame RenderSystem::buildFrameFromScene() const {
     return frame;
   }
 
+  frame.camera = resolveCamera(*scene);
+
   auto &registry = scene->getRegistry();
   for (const auto entity : registry.view<Renderable, WorldTransform>()) {
     const auto &renderable = registry.get<Renderable>(entity);
     const auto &worldTransform = registry.get<WorldTransform>(entity);
 
     DrawCommand draw{};
-    draw.mesh = resolvePrimitive(renderable.shape);
+    draw.mesh = renderable.mesh;
     draw.transform = worldTransform.matrix;
-    draw.tint = renderable.tint;
-    draw.useVertexColor = renderable.useVertexColor;
+
+    if (const Material *material = resolveMaterial(renderable.material)) {
+      draw.tint = material->tint;
+      draw.useVertexColor = material->useVertexColor;
+      draw.texture = material->texture;
+    }
+
+    if (const auto *tintOverride = registry.try_get<TintOverride>(entity)) {
+      draw.tint = tintOverride->tint;
+      draw.useVertexColor = false;
+    }
+
     frame.commands.push_back(draw);
   }
 
@@ -115,6 +188,8 @@ void RenderSystem::update(double /*dt*/) {
       }
       if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
           event.window.event == SDL_WINDOWEVENT_RESIZED) {
+        windowWidth_ = event.window.data1;
+        windowHeight_ = event.window.data2;
         if (renderer_) {
           renderer_->requestResize(static_cast<std::uint32_t>(event.window.data1),
                                    static_cast<std::uint32_t>(event.window.data2));

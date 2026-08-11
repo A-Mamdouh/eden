@@ -36,3 +36,6 @@ Scene components
 
 .. doxygenstruct:: Eden::WorldTransform
    :members:
+
+.. doxygenstruct:: Eden::Camera
+   :members:

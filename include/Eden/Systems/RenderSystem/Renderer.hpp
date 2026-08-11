@@ -28,6 +28,15 @@ public:
   ///        or already-destroyed handle silently no-ops.
   virtual void destroyMesh(MeshHandle handle) = 0;
 
+  /// Uploads `desc` to the GPU.
+  /// @param desc Texel data to upload; only needs to stay valid for the
+  ///        duration of this call.
+  /// @return Handle valid until destroyTexture() is called with it.
+  virtual TextureHandle createTexture(const TextureDesc &desc) = 0;
+  /// @param handle Handle previously returned by createTexture(); a stale
+  ///        or already-destroyed handle silently no-ops.
+  virtual void destroyTexture(TextureHandle handle) = 0;
+
   /// Draws one frame. Acquire/record/submit/present all happen inside
   /// this one call; no frame-lifecycle state is shared across calls.
   /// @param frame Camera, clear color, and draw commands for this frame.

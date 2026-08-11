@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <cstdint>
 #include <memory>
 
 TEST(NullRendererTest, CreateMeshReturnsValidHandle) {
@@ -37,6 +38,43 @@ TEST(NullRendererTest, HandleGenerationChangesWhenSlotIsReused) {
   const auto first = renderer.createMesh(Eden::MeshDesc{vertices});
   renderer.destroyMesh(first);
   const auto second = renderer.createMesh(Eden::MeshDesc{vertices});
+
+  EXPECT_EQ(first.id, second.id);
+  EXPECT_NE(first.generation, second.generation);
+}
+
+TEST(NullRendererTest, CreateTextureReturnsValidHandle) {
+  Eden::NullRenderer renderer;
+  const std::array<std::uint8_t, 4> pixels{255, 255, 255, 255};
+
+  const auto handle = renderer.createTexture(Eden::TextureDesc{1, 1, pixels});
+
+  EXPECT_TRUE(handle.valid());
+}
+
+TEST(NullRendererTest, DestroyTextureThenDestroyAgainIsSafe) {
+  Eden::NullRenderer renderer;
+  const std::array<std::uint8_t, 4> pixels{255, 255, 255, 255};
+  const auto handle = renderer.createTexture(Eden::TextureDesc{1, 1, pixels});
+
+  renderer.destroyTexture(handle);
+
+  EXPECT_NO_THROW(renderer.destroyTexture(handle));
+}
+
+TEST(NullRendererTest, DestroyingAnInvalidTextureHandleIsSafe) {
+  Eden::NullRenderer renderer;
+
+  EXPECT_NO_THROW(renderer.destroyTexture(Eden::TextureHandle{}));
+}
+
+TEST(NullRendererTest, TextureHandleGenerationChangesWhenSlotIsReused) {
+  Eden::NullRenderer renderer;
+  const std::array<std::uint8_t, 4> pixels{255, 255, 255, 255};
+
+  const auto first = renderer.createTexture(Eden::TextureDesc{1, 1, pixels});
+  renderer.destroyTexture(first);
+  const auto second = renderer.createTexture(Eden::TextureDesc{1, 1, pixels});
 
   EXPECT_EQ(first.id, second.id);
   EXPECT_NE(first.generation, second.generation);

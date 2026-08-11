@@ -5,6 +5,7 @@ add_executable(EdenTests
     TransformSystemTest.cpp
     ScriptSystemTest.cpp
     NullRendererTest.cpp
+    RenderSystemMaterialTest.cpp
 )
 
 target_link_libraries(

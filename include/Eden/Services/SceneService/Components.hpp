@@ -46,4 +46,33 @@ struct WorldTransform {
   Mat4 matrix{1.0f};
 };
 
+/// Determines how the scene is viewed for rendering. RenderSystem uses
+/// the first active Camera it finds each frame; entities without one
+/// don't affect rendering. Deliberately standalone (not driven by
+/// Transform/WorldTransform) for now -- a free-fly camera will likely
+/// reshape this (yaw/pitch or a forward vector instead of a fixed
+/// target), so it isn't worth coupling to the hierarchy system yet.
+struct Camera {
+  Vec3 position{0.0f, 0.0f, 3.0f};
+  /// World-space point the camera looks toward.
+  Vec3 target{0.0f, 0.0f, 0.0f};
+  Vec3 up{0.0f, 1.0f, 0.0f};
+  /// Vertical field of view, in degrees.
+  float fovDegrees{60.0f};
+  float nearPlane{0.1f};
+  float farPlane{100.0f};
+  /// If multiple Camera entities exist, the first active one (in scene
+  /// iteration order) is used; the rest are ignored.
+  bool active{true};
+
+  /// @return World-to-view matrix looking from position toward target.
+  Mat4 viewMatrix() const { return glm::lookAt(position, target, up); }
+
+  /// @param aspectRatio Viewport width / height.
+  /// @return View-to-clip perspective projection matrix.
+  Mat4 projectionMatrix(float aspectRatio) const {
+    return glm::perspective(glm::radians(fovDegrees), aspectRatio, nearPlane, farPlane);
+  }
+};
+
 } // namespace Eden

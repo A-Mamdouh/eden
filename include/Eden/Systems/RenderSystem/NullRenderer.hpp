@@ -18,6 +18,8 @@ public:
 
   MeshHandle createMesh(const MeshDesc &desc) override;
   void destroyMesh(MeshHandle handle) override;
+  TextureHandle createTexture(const TextureDesc &desc) override;
+  void destroyTexture(TextureHandle handle) override;
   void renderFrame(const RenderFrame &frame) override;
   void requestResize(std::uint32_t width, std::uint32_t height) override;
 
@@ -47,6 +49,18 @@ private:
   // see its comment for why.
   std::vector<NullMesh> meshes_{};
   std::vector<std::uint32_t> freeMeshSlots_{};
+
+  /// Tracks just enough to validate handle lifetime; no actual texel data
+  /// is stored.
+  struct NullTexture {
+    std::uint32_t width{0};
+    std::uint32_t height{0};
+    std::uint32_t generation{0};
+    bool alive{false};
+  };
+
+  std::vector<NullTexture> textures_{};
+  std::vector<std::uint32_t> freeTextureSlots_{};
 
   RenderFrame lastFrame_{};
   std::size_t frameCount_{0};

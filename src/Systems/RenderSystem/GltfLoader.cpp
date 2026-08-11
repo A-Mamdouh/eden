@@ -1,0 +1,304 @@
+#include "GltfLoader.hpp"
+
+#define CGLTF_IMPLEMENTATION
+#include <cgltf.h>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
+#include "Eden/Services/SceneService/Components.hpp"
+#include "Eden/Services/SceneService/Scene.hpp"
+#include "Eden/Systems/RenderSystem/Material.hpp"
+#include "Eden/Systems/RenderSystem/RenderSystem.hpp"
+
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
+
+#include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <memory>
+#include <stdexcept>
+#include <unordered_map>
+#include <vector>
+
+namespace Eden {
+namespace {
+
+/// RAII owner for a cgltf_data*, so early throws don't leak it.
+struct GltfDataDeleter {
+  void operator()(cgltf_data *data) const noexcept {
+    if (data) {
+      cgltf_free(data);
+    }
+  }
+};
+using GltfDataPtr = std::unique_ptr<cgltf_data, GltfDataDeleter>;
+
+std::vector<std::uint8_t> readFile(const std::filesystem::path &path) {
+  std::ifstream file(path, std::ios::binary | std::ios::ate);
+  if (!file) {
+    throw std::runtime_error("Failed to open file: " + path.string());
+  }
+
+  const std::streamsize size = file.tellg();
+  std::vector<std::uint8_t> buffer(static_cast<std::size_t>(size));
+  file.seekg(0);
+  file.read(reinterpret_cast<char *>(buffer.data()), size);
+  if (!file) {
+    throw std::runtime_error("Failed to read file: " + path.string());
+  }
+
+  return buffer;
+}
+
+/// @return `image`'s texel data decoded to RGBA8, from its embedded
+/// bufferView if present, else from a file resolved as `basePath /
+/// image.uri`. Throws if neither source is present or decoding fails.
+TextureDesc decodeImage(const cgltf_image &image, const std::filesystem::path &basePath,
+                        std::vector<std::uint8_t> &pixelStorage) {
+  int width = 0;
+  int height = 0;
+  int sourceChannels = 0;
+  stbi_uc *decoded = nullptr;
+
+  if (image.buffer_view) {
+    const auto *bufferData = static_cast<const std::uint8_t *>(image.buffer_view->buffer->data) +
+                             image.buffer_view->offset;
+    decoded = stbi_load_from_memory(bufferData, static_cast<int>(image.buffer_view->size), &width,
+                                    &height, &sourceChannels, 4);
+  } else if (image.uri) {
+    const std::vector<std::uint8_t> fileBytes = readFile(basePath / image.uri);
+    decoded = stbi_load_from_memory(fileBytes.data(), static_cast<int>(fileBytes.size()), &width,
+                                    &height, &sourceChannels, 4);
+  } else {
+    throw std::runtime_error("glTF image has neither a bufferView nor a uri");
+  }
+
+  if (!decoded) {
+    throw std::runtime_error("Failed to decode glTF image: " + std::string(stbi_failure_reason()));
+  }
+
+  const std::size_t byteCount = static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4;
+  pixelStorage.assign(decoded, decoded + byteCount);
+  stbi_image_free(decoded);
+
+  TextureDesc desc{};
+  desc.width = static_cast<std::uint32_t>(width);
+  desc.height = static_cast<std::uint32_t>(height);
+  desc.pixels = pixelStorage;
+  return desc;
+}
+
+/// @return Eden-layout vertices and (always present, triangle-list)
+/// indices for `primitive`. Throws if it isn't a triangle list or is
+/// missing POSITION.
+struct PrimitiveGeometry {
+  std::vector<Vertex> vertices;
+  std::vector<std::uint32_t> indices;
+};
+
+PrimitiveGeometry extractGeometry(const cgltf_primitive &primitive) {
+  if (primitive.type != cgltf_primitive_type_triangles) {
+    throw std::runtime_error("Only triangle-list glTF primitives are supported");
+  }
+
+  const cgltf_accessor *positions = nullptr;
+  const cgltf_accessor *texcoords = nullptr;
+  for (cgltf_size i = 0; i < primitive.attributes_count; ++i) {
+    const cgltf_attribute &attribute = primitive.attributes[i];
+    if (attribute.type == cgltf_attribute_type_position) {
+      positions = attribute.data;
+    } else if (attribute.type == cgltf_attribute_type_texcoord && attribute.index == 0) {
+      texcoords = attribute.data;
+    }
+  }
+
+  if (!positions) {
+    throw std::runtime_error("glTF primitive is missing a POSITION attribute");
+  }
+
+  const std::size_t vertexCount = positions->count;
+
+  std::vector<float> positionFloats(vertexCount * 3);
+  cgltf_accessor_unpack_floats(positions, positionFloats.data(), positionFloats.size());
+
+  std::vector<float> texcoordFloats;
+  if (texcoords) {
+    texcoordFloats.resize(vertexCount * 2);
+    cgltf_accessor_unpack_floats(texcoords, texcoordFloats.data(), texcoordFloats.size());
+  }
+
+  PrimitiveGeometry geometry{};
+  geometry.vertices.resize(vertexCount);
+  for (std::size_t i = 0; i < vertexCount; ++i) {
+    Vertex &vertex = geometry.vertices[i];
+    vertex.position =
+        Vec3{positionFloats[i * 3 + 0], positionFloats[i * 3 + 1], positionFloats[i * 3 + 2]};
+    // glTF meshes shade via material (texture/factors), not per-vertex
+    // color; RenderSystem's Material for this primitive sets
+    // useVertexColor = false, so this value is never actually sampled.
+    vertex.color = Color{1.0f, 1.0f, 1.0f, 1.0f};
+    if (texcoords) {
+      vertex.uv = Vec2{texcoordFloats[i * 2 + 0], texcoordFloats[i * 2 + 1]};
+    }
+  }
+
+  if (primitive.indices) {
+    geometry.indices.resize(primitive.indices->count);
+    cgltf_accessor_unpack_indices(primitive.indices, geometry.indices.data(), sizeof(std::uint32_t),
+                                  geometry.indices.size());
+  }
+
+  return geometry;
+}
+
+/// @return `node`'s local Transform, decomposed from cgltf's computed
+/// local matrix (itself correct whether the source file used a raw
+/// matrix or separate translation/rotation/scale). Rotation goes through
+/// a quaternion-to-Euler conversion -- fine for typical authored content,
+/// but can lose precision or hit gimbal lock for extreme/animated
+/// rotations, which Eden's Transform doesn't represent.
+Transform toEdenTransform(const cgltf_node &node) {
+  float matrixValues[16];
+  cgltf_node_transform_local(&node, matrixValues);
+  const Mat4 matrix = glm::make_mat4(matrixValues);
+
+  Vec3 scale{};
+  glm::quat rotation{};
+  Vec3 translation{};
+  Vec3 skew{};
+  Vec4 perspective{};
+  glm::decompose(matrix, scale, rotation, translation, skew, perspective);
+
+  Transform transform{};
+  transform.position = translation;
+  transform.rotationEuler = glm::degrees(glm::eulerAngles(rotation));
+  transform.scale = scale;
+  return transform;
+}
+
+} // namespace
+
+void loadGltfModel(const std::string &path, RenderSystem &renderSystem, Scene &scene) {
+  cgltf_options options{};
+  cgltf_data *rawData = nullptr;
+
+  if (cgltf_parse_file(&options, path.c_str(), &rawData) != cgltf_result_success) {
+    throw std::runtime_error("Failed to parse glTF file: " + path);
+  }
+  const GltfDataPtr data{rawData};
+
+  if (cgltf_load_buffers(&options, data.get(), path.c_str()) != cgltf_result_success) {
+    throw std::runtime_error("Failed to load glTF buffers for: " + path);
+  }
+
+  const std::filesystem::path basePath = std::filesystem::path(path).parent_path();
+
+  // One Eden TextureHandle per cgltf_image actually referenced by a
+  // material, decoded (and uploaded) at most once even if several
+  // materials share it.
+  std::unordered_map<const cgltf_image *, TextureHandle> textures;
+  // One Eden MaterialHandle per cgltf_material.
+  std::unordered_map<const cgltf_material *, MaterialHandle> materials;
+
+  for (cgltf_size i = 0; i < data->materials_count; ++i) {
+    const cgltf_material &gltfMaterial = data->materials[i];
+
+    Material material{};
+    material.useVertexColor = false;
+
+    if (gltfMaterial.has_pbr_metallic_roughness) {
+      const cgltf_pbr_metallic_roughness &pbr = gltfMaterial.pbr_metallic_roughness;
+      material.tint = Color{pbr.base_color_factor[0], pbr.base_color_factor[1],
+                            pbr.base_color_factor[2], pbr.base_color_factor[3]};
+
+      if (const cgltf_texture *texture = pbr.base_color_texture.texture) {
+        if (const cgltf_image *image = texture->image) {
+          auto it = textures.find(image);
+          if (it == textures.end()) {
+            std::vector<std::uint8_t> pixelStorage;
+            const TextureDesc desc = decodeImage(*image, basePath, pixelStorage);
+            it = textures.emplace(image, renderSystem.createTexture(desc)).first;
+          }
+          material.texture = it->second;
+        }
+      }
+    }
+
+    materials.emplace(&gltfMaterial, renderSystem.createMaterial(material));
+  }
+
+  // One Eden MeshHandle per cgltf_primitive -- a glTF mesh with several
+  // primitives (each with its own material) becomes several Renderables,
+  // spawned as sibling entities below (see the node loop).
+  struct PrimitiveHandles {
+    MeshHandle mesh{};
+    MaterialHandle material{};
+  };
+  std::unordered_map<const cgltf_primitive *, PrimitiveHandles> primitiveHandles;
+
+  for (cgltf_size i = 0; i < data->meshes_count; ++i) {
+    const cgltf_mesh &gltfMesh = data->meshes[i];
+    for (cgltf_size p = 0; p < gltfMesh.primitives_count; ++p) {
+      const cgltf_primitive &primitive = gltfMesh.primitives[p];
+      const PrimitiveGeometry geometry = extractGeometry(primitive);
+
+      PrimitiveHandles handles{};
+      handles.mesh = renderSystem.createMesh(MeshDesc{geometry.vertices, geometry.indices});
+      if (primitive.material) {
+        handles.material = materials.at(primitive.material);
+      }
+
+      primitiveHandles.emplace(&primitive, handles);
+    }
+  }
+
+  // One Eden entity per glTF node, mirroring the hierarchy via
+  // EntityHierarchy (root nodes get no EntityHierarchy, same as any other
+  // Eden root entity).
+  std::unordered_map<const cgltf_node *, Entity> nodeEntities;
+
+  for (cgltf_size i = 0; i < data->nodes_count; ++i) {
+    const cgltf_node &node = data->nodes[i];
+    Entity entity = scene.createEntity();
+    entity.addComponent<Transform>(toEdenTransform(node));
+    nodeEntities.emplace(&node, entity);
+  }
+
+  for (cgltf_size i = 0; i < data->nodes_count; ++i) {
+    const cgltf_node &node = data->nodes[i];
+    if (!node.parent) {
+      continue;
+    }
+    nodeEntities.at(&node).addComponent<EntityHierarchy>(
+        EntityHierarchy{.parent = nodeEntities.at(node.parent).handle()});
+  }
+
+  // A node's first primitive reuses the node's own entity; any further
+  // primitives in the same mesh get their own entity parented to it, since
+  // an Eden entity can only carry one Renderable.
+  for (cgltf_size i = 0; i < data->nodes_count; ++i) {
+    const cgltf_node &node = data->nodes[i];
+    if (!node.mesh) {
+      continue;
+    }
+
+    Entity nodeEntity = nodeEntities.at(&node);
+    for (cgltf_size p = 0; p < node.mesh->primitives_count; ++p) {
+      const PrimitiveHandles &handles = primitiveHandles.at(&node.mesh->primitives[p]);
+
+      Entity target = nodeEntity;
+      if (p > 0) {
+        target = scene.createEntity();
+        target.addComponent<Transform>(Transform{});
+        target.addComponent<EntityHierarchy>(EntityHierarchy{.parent = nodeEntity.handle()});
+      }
+      target.addComponent<Renderable>(Renderable{.mesh = handles.mesh, .material = handles.material});
+    }
+  }
+}
+
+} // namespace Eden

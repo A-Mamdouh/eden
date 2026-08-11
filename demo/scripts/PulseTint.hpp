@@ -4,15 +4,22 @@
 
 #include <cmath>
 
-/// Animates its entity's Renderable tint through a red/blue pulse over
-/// time. Assumes the entity already has a Renderable with
-/// useVertexColor = false -- see Renderable::tint.
+/// Animates its entity's color through a red/blue pulse over time, via a
+/// TintOverride -- added on first update if the entity doesn't already
+/// have one -- rather than mutating the entity's (possibly shared)
+/// Material.
 class PulseTint : public Eden::ScriptBehaviour {
 public:
   void onUpdate(Eden::Entity entity, double dt) override {
     elapsedTime_ += dt;
     const float pulse = static_cast<float>(0.5 + 0.5 * std::sin(elapsedTime_));
-    entity.getComponent<Eden::Renderable>().tint = Eden::Color{pulse, 0.3f, 1.0f - pulse, 1.0f};
+    const Eden::Color color{pulse, 0.3f, 1.0f - pulse, 1.0f};
+
+    if (entity.hasComponent<Eden::TintOverride>()) {
+      entity.getComponent<Eden::TintOverride>().tint = color;
+    } else {
+      entity.addComponent<Eden::TintOverride>(Eden::TintOverride{.tint = color});
+    }
   }
 
 private:
