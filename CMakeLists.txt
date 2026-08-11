@@ -13,7 +13,11 @@ if(NOT EXISTS "${EDEN_ENGINE_METADATA_FILE}")
 endif()
 include("${EDEN_ENGINE_METADATA_FILE}")
 
+option(EDEN_BUILD_ENGINE "Build the Eden engine library, demo, and tests (requires the Vulkan SDK)" ON)
 option(EDEN_BUILD_DEMO "Build Eden standalone demo executable" ${EDEN_IS_TOP_LEVEL})
+option(EDEN_BUILD_DOCS "Build Eden documentation (requires Doxygen + Sphinx)" OFF)
+
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 
 # Define project using the configured metadata
 project(
@@ -23,7 +27,14 @@ project(
     LANGUAGES CXX C
 )
 
-set(BUILD_SHARED_LIBS FALSE) 
+set(BUILD_SHARED_LIBS FALSE)
+
+# Everything in this block is about building/testing the engine itself and
+# needs the Vulkan SDK (for glslc) plus every FetchContent dependency below.
+# Documentation only parses header text, so EDEN_BUILD_DOCS deliberately
+# doesn't require any of it -- that's what keeps a docs-only CI job fast
+# and independent of engine build health.
+if (EDEN_BUILD_ENGINE)
 
 find_package(Git REQUIRED)
 
@@ -190,3 +201,9 @@ endif()
 add_subdirectory(tests)
 
 add_dependencies(Eden EdenShaders)
+
+endif() # EDEN_BUILD_ENGINE
+
+if (EDEN_BUILD_DOCS)
+    add_subdirectory(docs)
+endif()

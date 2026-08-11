@@ -1,0 +1,79 @@
+name: Docs
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "docs/**"
+      - "include/**"
+      - "cmake/FindSphinx.cmake"
+      - "cmake/engine-meta.cmake"
+      - "CMakeLists.txt"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "include/**"
+      - "cmake/FindSphinx.cmake"
+      - "cmake/engine-meta.cmake"
+      - "CMakeLists.txt"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one Pages deployment at a time; never cancel one mid-flight.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Doxygen and Ninja
+        run: sudo apt-get update && sudo apt-get install -y doxygen ninja-build
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+          cache: "pip"
+          cache-dependency-path: docs/requirements.txt
+
+      - run: pip install -r docs/requirements.txt
+
+      # EDEN_BUILD_ENGINE=OFF skips the Vulkan SDK / SDL2 / EnTT dependency
+      # chain entirely -- docs only need to parse header text, not compile
+      # the engine, so this job stays fast and independent of engine build
+      # health.
+      - name: Configure
+        run: cmake -B build -G Ninja -DEDEN_BUILD_ENGINE=OFF -DEDEN_BUILD_DOCS=ON
+
+      - name: Build docs
+        run: cmake --build build --target Sphinx
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eden-docs-html
+          path: build/docs/sphinx
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        with:
+          path: build/docs/sphinx
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

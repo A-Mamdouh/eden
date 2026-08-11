@@ -1,0 +1,23 @@
+# Configuration file for the Sphinx documentation builder, generated from
+# conf.py.in by CMake (see docs/CMakeLists.txt).
+
+project = "@EDEN_ENGINE_NAME@"
+copyright = "Eden contributors"
+author = "Eden contributors"
+release = "@EDEN_ENGINE_VERSION@"
+
+extensions = [
+    "breathe",
+]
+
+breathe_projects = {
+    "Eden": "@DOXYGEN_OUTPUT_DIR@/xml",
+}
+breathe_default_project = "Eden"
+breathe_default_members = ("members", "undoc-members")
+
+templates_path = []
+exclude_patterns = []
+
+html_theme = "sphinx_rtd_theme"
+html_static_path = []

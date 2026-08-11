@@ -15,6 +15,8 @@ namespace Eden {
 
 class EventService;
 
+/// Opaque token returned by EventService::subscribe(), needed to
+/// unsubscribe(). Only constructible by EventService itself.
 class ListenerId {
 private:
   friend EventService;
@@ -22,19 +24,30 @@ private:
   std::size_t id;
 };
 
+/// Type-indexed pub/sub bus. Every Service and System holds a weak
+/// reference to the single instance Engine owns, so any subsystem can
+/// publish or subscribe to any IEvent-derived type without a direct
+/// dependency on the publisher.
 class EventService : public IService {
 public:
   virtual std::string getName() override { return "EventType Service"; }
 
-  // TODO: Implement here in header
+  /// Registers `listener` for every future publish<EventType>() call.
+  /// @param listener Callback invoked synchronously on each matching publish().
+  /// @return Token to pass to unsubscribe<EventType>(); not valid for
+  ///         any other EventType.
   template <typename EventType>
     requires is_event_type<EventType>
-  ListenerId subscribe(std::function<void(const EventType &)>);
+  ListenerId subscribe(std::function<void(const EventType &)> listener);
 
+  /// @param id Token previously returned by subscribe<EventType>() for
+  ///        this same EventType; a mismatched EventType silently no-ops.
   template <typename EventType>
     requires is_event_type<EventType>
   void unsubscribe(ListenerId id);
 
+  /// Synchronously invokes every listener subscribed to EventType.
+  /// @param event Payload passed by const reference to each listener.
   template <typename EventType>
     requires is_event_type<EventType>
   void publish(const EventType &event) const;
