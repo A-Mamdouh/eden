@@ -4,7 +4,7 @@ Pulling together everything suggested across this session into one prioritized l
 
 2. Hierarchy demo scene (cheap, no new engine code) — a parent-child arrangement of entities (e.g. a simple solar-system-style demo). Pure content using EntityHierarchy/TransformSystem, which already exist. The fastest way to make "extensibility" visible rather than argued. (The glTF test asset's two-node hierarchy exercises the mechanism, but there's no dedicated demo content showing it off yet.)
 
-3. InputSystem + interactive demo (medium effort, highest resume payoff) — the single most convincing kind of demo for this project ("look, I can control something"), and the natural next step now that ScriptSystem exists with nothing to react to yet. Also a prerequisite for the free camera below.
+3. ~~InputSystem + interactive demo~~ — Done. `InputSystem` polls SDL keyboard/mouse state once per frame (`isKeyDown`/`isKeyPressed`/`mouseDelta`/`setMouseCaptured`), exposed through a vendor-neutral `Key` enum so no SDL type leaks into a public header. Runs before `ScriptSystem` in `Engine`'s system order so scripts see fresh input the same frame; `ScriptBehaviour::onStart`/`onUpdate` both gained an `InputSystem&` parameter (the extension point the class's doc comment had anticipated). `demo/scripts/FreeFlyCamera.hpp` is the payoff: WASD + mouselook driving a `Camera` entity via `Engine::setActiveCamera`, entirely through the same script hooks as `PulseTint`. (Verification note: an automated test pass initially seemed to show the Vulkan backend dropping draws when looking up past a moderate angle. That turned out to be an artifact of the test harness itself — per-frame `spdlog::info()` calls redirected to a file, at an uncapped framerate, stalling the render loop badly enough to produce spurious blank captures. Manual play showed no such issue. No rendering bug here.)
 
 4. ~~Depth testing~~ — Done. Device-local depth image/view, second render-pass attachment, `pDepthStencilState` in the pipeline.
 
@@ -18,9 +18,9 @@ One cleanup worth naming: JobService sits in the tree fully non-functional (docu
 
 ## Next milestone (as scoped when 1/4/5/6 above were picked up)
 
-The actual goal behind camera/depth/textures/materials/asset-loading was prep work for two follow-on milestones, not yet started:
+The actual goal behind camera/depth/textures/materials/asset-loading was prep work for two follow-on milestones:
 
-- **Demo scene**: replace the current placeholder triangle/quad/test-quad content with a small `loadModel()`-driven map, plus a free-fly camera (needs InputSystem from #3 above, or at least a minimal keyboard/mouse read path) — the Camera component is deliberately not yet coupled to Transform/WorldTransform, anticipating this.
-- **Physics + character**: extend toward a game engine — a physics system and a controllable character, likely needing InputSystem too.
+- **Demo scene**: replace the current placeholder triangle/quad/test-quad content with a small `loadModel()`-driven map, plus the free-fly camera from #3 above, both of which now exist.
+- **Physics + character**: extend toward a game engine — a physics system and a controllable character, now that InputSystem exists to drive one.
 
-My recommendation: hierarchy demo (#2) is nearly free now that the loader exists — worth doing alongside whichever of InputSystem or the free-camera/map demo comes next, since they reinforce each other. Want to go in that order, or pick something else off the list?
+My recommendation: hierarchy demo (#2) is nearly free now that the loader exists — worth doing alongside whichever of the demo-scene or physics/character work comes next, since they reinforce each other. Want to go in that order, or pick something else off the list?

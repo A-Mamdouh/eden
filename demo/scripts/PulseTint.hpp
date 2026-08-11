@@ -10,7 +10,7 @@
 /// Material.
 class PulseTint : public Eden::ScriptBehaviour {
 public:
-  void onUpdate(Eden::Entity entity, double dt) override {
+  void onUpdate(Eden::Entity entity, double dt, Eden::InputSystem & /*input*/) override {
     elapsedTime_ += dt;
     const float pulse = static_cast<float>(0.5 + 0.5 * std::sin(elapsedTime_));
     const Eden::Color color{pulse, 0.3f, 1.0f - pulse, 1.0f};

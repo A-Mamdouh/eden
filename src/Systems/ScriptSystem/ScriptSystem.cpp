@@ -22,9 +22,9 @@ void ScriptSystem::update(double dt) {
     const Entity entity{entityHandle, &registry};
     if (!scriptComponent.started) {
       scriptComponent.started = true;
-      scriptComponent.behaviour->onStart(entity);
+      scriptComponent.behaviour->onStart(entity, inputSystem_);
     }
-    scriptComponent.behaviour->onUpdate(entity, dt);
+    scriptComponent.behaviour->onUpdate(entity, dt, inputSystem_);
   }
 }
 

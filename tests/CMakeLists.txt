@@ -4,6 +4,7 @@ add_executable(EdenTests
     SceneTest.cpp
     TransformSystemTest.cpp
     ScriptSystemTest.cpp
+    InputSystemTest.cpp
     NullRendererTest.cpp
     RenderSystemMaterialTest.cpp
 )

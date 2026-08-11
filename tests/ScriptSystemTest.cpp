@@ -1,5 +1,6 @@
 #include <Eden/Services/SceneService/Components.hpp>
 #include <Eden/Services/SceneService/SceneService.hpp>
+#include <Eden/Systems/InputSystem/InputSystem.hpp>
 #include <Eden/Systems/ScriptSystem/ScriptBehaviour.hpp>
 #include <Eden/Systems/ScriptSystem/ScriptComponent.hpp>
 #include <Eden/Systems/ScriptSystem/ScriptSystem.hpp>
@@ -12,8 +13,8 @@ namespace {
 
 class RecordingScript : public Eden::ScriptBehaviour {
 public:
-  void onStart(Eden::Entity) override { ++startCount; }
-  void onUpdate(Eden::Entity, double dt) override {
+  void onStart(Eden::Entity, Eden::InputSystem &) override { ++startCount; }
+  void onUpdate(Eden::Entity, double dt, Eden::InputSystem &) override {
     ++updateCount;
     lastDt = dt;
   }
@@ -25,7 +26,7 @@ public:
 
 class MoveScript : public Eden::ScriptBehaviour {
 public:
-  void onUpdate(Eden::Entity entity, double dt) override {
+  void onUpdate(Eden::Entity entity, double dt, Eden::InputSystem &) override {
     entity.getComponent<Eden::Transform>().position.x += static_cast<float>(dt);
   }
 };
@@ -43,7 +44,8 @@ TEST_F(ScriptSystemTest, OnStartIsCalledExactlyOnce) {
   entity.addComponent<Eden::ScriptComponent>(Eden::ScriptComponent{.behaviour = std::move(script)});
   sceneService.loadScene(std::move(scenePtr));
 
-  Eden::ScriptSystem scriptSystem{sceneService};
+  Eden::InputSystem inputSystem;
+  Eden::ScriptSystem scriptSystem{sceneService, inputSystem};
   scriptSystem.init(eventService);
 
   scriptSystem.update(0.1);
@@ -65,7 +67,8 @@ TEST_F(ScriptSystemTest, OnUpdateReceivesTheFrameDt) {
   entity.addComponent<Eden::ScriptComponent>(Eden::ScriptComponent{.behaviour = std::move(script)});
   sceneService.loadScene(std::move(scenePtr));
 
-  Eden::ScriptSystem scriptSystem{sceneService};
+  Eden::InputSystem inputSystem;
+  Eden::ScriptSystem scriptSystem{sceneService, inputSystem};
   scriptSystem.init(eventService);
   scriptSystem.update(0.25);
 
@@ -81,7 +84,8 @@ TEST_F(ScriptSystemTest, EntityWithNullBehaviourIsSkipped) {
   entity.addComponent<Eden::ScriptComponent>();
   sceneService.loadScene(std::move(scenePtr));
 
-  Eden::ScriptSystem scriptSystem{sceneService};
+  Eden::InputSystem inputSystem;
+  Eden::ScriptSystem scriptSystem{sceneService, inputSystem};
   scriptSystem.init(eventService);
 
   EXPECT_NO_THROW(scriptSystem.update(0.016));
@@ -97,7 +101,8 @@ TEST_F(ScriptSystemTest, ScriptCanMutateItsOwnComponents) {
   entity.addComponent<Eden::ScriptComponent>(Eden::ScriptComponent{.behaviour = std::make_unique<MoveScript>()});
   sceneService.loadScene(std::move(scenePtr));
 
-  Eden::ScriptSystem scriptSystem{sceneService};
+  Eden::InputSystem inputSystem;
+  Eden::ScriptSystem scriptSystem{sceneService, inputSystem};
   scriptSystem.init(eventService);
   scriptSystem.update(2.0);
 

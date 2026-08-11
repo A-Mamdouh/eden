@@ -4,6 +4,7 @@
 #include "Eden/Services/ConfigService/ConfigService.hpp"
 #include "Eden/Services/EventService/EventService.hpp"
 #include "Eden/Services/SceneService/SceneService.hpp"
+#include "Eden/Systems/InputSystem/InputSystem.hpp"
 #include "Eden/Systems/RenderSystem/RenderSystem.hpp"
 #include "Eden/Systems/ScriptSystem/ScriptSystem.hpp"
 #include "Eden/Systems/TransformSystem.hpp"
@@ -31,10 +32,17 @@ void Engine::init() {
   sceneService_ = std::make_unique<SceneService>();
   sceneService_->init(eventService_);
 
-  // Scripts run first so any component writes they make (Transform,
+  // Input runs first so scripts see this frame's fresh keyboard/mouse
+  // state, not last frame's.
+  auto inputSystem = std::make_unique<InputSystem>();
+  inputSystem->init(eventService_);
+  InputSystem &inputSystemRef = *inputSystem;
+  systems_.push_back(std::move(inputSystem));
+
+  // Scripts run next so any component writes they make (Transform,
   // Renderable, ...) are visible to TransformSystem/RenderSystem the
   // same frame, not one frame late.
-  auto scriptSystem = std::make_unique<ScriptSystem>(*sceneService_);
+  auto scriptSystem = std::make_unique<ScriptSystem>(*sceneService_, inputSystemRef);
   scriptSystem->init(eventService_);
   systems_.push_back(std::move(scriptSystem));
 

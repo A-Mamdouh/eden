@@ -4,6 +4,7 @@
 #include <spdlog/spdlog.h>
 #include <Eden/Eden.hpp>
 
+#include "scripts/FreeFlyCamera.hpp"
 #include "scripts/PulseTint.hpp"
 
 namespace {
@@ -64,6 +65,15 @@ std::unique_ptr<Eden::Scene> buildDemoScene(Eden::Engine &engine, const DemoMesh
   auto loadedModel = scene->createEntity();
   loadedModel.addComponent<Eden::Transform>(Eden::Transform{});
   loadedModel.addComponent<Eden::Model>(std::move(quadModel));
+
+  // Free-fly camera: W/A/S/D to move, mouse to look, Escape to release
+  // the cursor. setActiveCamera() just needs this entity's id, so it's
+  // fine to call before loadScene() takes ownership of the scene below.
+  auto camera = scene->createEntity();
+  camera.addComponent<Eden::Camera>(Eden::Camera{.position = {0.0f, 0.0f, 4.0f}});
+  camera.addComponent<Eden::ScriptComponent>(
+      Eden::ScriptComponent{.behaviour = std::make_unique<FreeFlyCamera>()});
+  engine.setActiveCamera(camera);
 
   return scene;
 }

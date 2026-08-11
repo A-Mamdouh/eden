@@ -33,13 +33,16 @@ What ``Engine::init()`` actually constructs, in order:
 2. ``ConfigService``
 3. ``ClockService``
 4. ``SceneService``
-5. ``ScriptSystem``
-6. ``TransformSystem``
-7. ``RenderSystem``
+5. ``InputSystem``
+6. ``ScriptSystem``
+7. ``TransformSystem``
+8. ``RenderSystem``
 
-Systems run in registration order each frame: ``ScriptSystem`` before
+Systems run in registration order each frame: ``InputSystem`` before
+``ScriptSystem`` so a script sees this frame's fresh keyboard/mouse
+state rather than last frame's; ``ScriptSystem`` before
 ``TransformSystem`` so a script's ``Transform``/``Renderable`` writes are
-already in place when world transforms get computed, and
+already in place when world transforms get computed; and
 ``TransformSystem`` before ``RenderSystem`` so rendering always reads
 this frame's fresh world transforms, never last frame's. Each frame,
 ``Engine::run()`` calls ``ClockService::tick()`` for delta time, then
@@ -97,17 +100,43 @@ Both hooks receive the owning :cpp:class:`Eden::Entity`, so a script
 reads/writes its own components the same way any other code does --
 ``entity.getComponent<TintOverride>().tint = ...``, for example.
 
-Deliberately minimal for now: a script only ever sees its own entity and
-``dt``, nothing else (no input, no querying other entities, no access to
-Renderer/EventService). There's no ``InputSystem`` yet for a script to
-react to, so this hasn't been a real limitation so far; when one is
-needed, it can be added as a further argument to ``onUpdate`` without
-breaking existing scripts.
+Both hooks also receive an :cpp:class:`Eden::InputSystem`, non-const
+because scripts legitimately mutate it too (e.g. releasing mouse
+capture), not just query it -- see Input below. Beyond that, still
+deliberately minimal: no querying other entities, no access to
+Renderer/EventService.
 
-``demo/scripts/PulseTint.hpp`` is the reference example: it animates an
-entity's color through a ``sin(time)`` pulse by writing a
-``TintOverride``, which is what the demo's quad used to do as hardcoded
-logic inside ``RenderSystem`` before the scene system existed.
+``demo/scripts/PulseTint.hpp`` is the reference example for reading
+components: it animates an entity's color through a ``sin(time)`` pulse
+by writing a ``TintOverride``, which is what the demo's quad used to do
+as hardcoded logic inside ``RenderSystem`` before the scene system
+existed. ``demo/scripts/FreeFlyCamera.hpp`` is the reference example for
+reading input: a WASD-plus-mouselook camera controller, driven entirely
+through the same ``ScriptBehaviour`` hooks -- see Input below.
+
+Input
+-----
+
+:cpp:class:`Eden::InputSystem` polls SDL's keyboard/mouse state once per
+frame via ``SDL_GetKeyboardState()``/``SDL_GetRelativeMouseState()`` and
+exposes it as simple queries (:cpp:func:`Eden::InputSystem::isKeyDown`,
+:cpp:func:`Eden::InputSystem::isKeyPressed` for the up-to-down edge,
+:cpp:func:`Eden::InputSystem::mouseDelta`) plus
+:cpp:func:`Eden::InputSystem::setMouseCaptured` for mouselook (hides the
+cursor and reports unbounded relative motion instead of a
+screen-edge-clamped position). Keys are identified by the vendor-neutral
+:cpp:enum:`Eden::Key` rather than an SDL scancode, keeping SDL out of
+every public header the way ``Vec3``/``Mat4`` keep glm's types out.
+
+Deliberately polling-style rather than an event stream: that covers
+everything a movement/mouselook script actually needs, without needing
+to fan discrete events out to listeners the way ``EventService`` does.
+It doesn't own SDL's event queue either -- ``RenderSystem`` still pumps
+that directly for quit/resize, exactly as before; ``SDL_GetKeyboardState``/
+``SDL_GetRelativeMouseState`` read input-device state that
+``SDL_PumpEvents`` (called internally by whichever of the two runs first
+each frame) keeps current, without draining the same queue
+``RenderSystem`` polls, so the two coexist safely.
 
 Rendering
 ---------
@@ -218,6 +247,10 @@ Testing
 ``EventService`` pub/sub, ``ClockService`` timing/pause/scale behavior,
 ``Scene``/``Entity``/component round-tripping, ``TransformSystem``'s
 hierarchy composition, ``ScriptSystem``'s start/update contract,
+``InputSystem``'s query methods (constructed without calling ``init()``
+either -- ``SDL_GetKeyboardState``/``SDL_PumpEvents``/
+``SDL_GetRelativeMouseState`` are all safe to call before ``SDL_Init``,
+which is what makes this testable without a window),
 ``NullRenderer``'s mesh/texture handle lifecycle, and
 ``RenderSystem``'s Material handle lifecycle (constructed without
 calling ``init()``, so no real window/GPU is ever touched) -- all pure
@@ -232,10 +265,6 @@ demo, not by an automated test.
 Known gaps
 ----------
 
-- No ``InputSystem`` yet, so scripts can't react to keyboard/mouse --
-  see the Scripting section above. Also blocks the free-fly camera the
-  demo is meant to grow next: ``Camera`` is deliberately not yet coupled
-  to ``Transform``/``WorldTransform`` in anticipation of that.
 - The glTF loader supports triangle-list primitives with POSITION +
   TEXCOORD_0 and a base-color texture/factor -- no skinning/animation,
   vertex normals, multi-UV materials, or other PBR texture slots

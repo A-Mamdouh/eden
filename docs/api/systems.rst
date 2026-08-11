@@ -7,6 +7,11 @@ Systems
 .. doxygenclass:: Eden::ScriptSystem
    :members:
 
+.. doxygenclass:: Eden::InputSystem
+   :members:
+
+.. doxygenenum:: Eden::Key
+
 .. doxygenclass:: Eden::TransformSystem
    :members:
 
