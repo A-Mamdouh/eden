@@ -124,13 +124,29 @@ asset-loading system yet.
 The Vulkan backend is implemented against this contract; see the
 Vulkan-specific header/source under ``Systems/RenderSystem/Vulkan/`` for
 current status rather than trusting this page to stay in sync on backend
-internals.
+internals. :cpp:class:`Eden::NullRenderer` is a second, headless
+implementation -- no window, no GPU, no graphics API calls -- that
+exists to prove the contract is genuinely backend-agnostic and to give
+the test suite (below) something to construct a ``Renderer`` against
+without a GPU. It isn't wired into ``RenderSystem``; only tests use it
+directly.
+
+Testing
+-------
+
+``tests/`` is GoogleTest-based and runs via ``ctest``. Coverage today:
+``EventService`` pub/sub, ``ClockService`` timing/pause/scale behavior,
+``Scene``/``Entity``/component round-tripping, ``TransformSystem``'s
+hierarchy composition, ``ScriptSystem``'s start/update contract, and
+``NullRenderer``'s handle lifecycle -- all pure logic, none of it needs
+a window or GPU, which is what makes it possible to run in CI without a
+display or real Vulkan driver (see ``.github/workflows/ci.yml``, which
+still needs the Vulkan SDK installed to *build* ``VulkanRenderer.cpp``
+and link the loader, just not to run these tests).
 
 Known gaps
 ----------
 
-- ``tests/smoke_test.cpp`` is a single ``SUCCEED()`` -- no real coverage
-  yet.
 - No real asset loading: ``RenderSystem``'s primitive mesh library is
   hardcoded C++, not loaded from a file format.
 - No camera component yet -- ``RenderSystem`` currently renders with an
@@ -151,11 +167,13 @@ Building
 
    cmake -B build -G Ninja
    cmake --build build
+   ctest --test-dir build --output-on-failure
 
 Dependencies (SDL2, spdlog, EnTT, glm, GoogleTest) are fetched
 automatically via CMake ``FetchContent`` if not already installed
 system-wide. The Vulkan SDK (providing ``glslc`` and the Vulkan loader)
-must be installed separately.
+must be installed separately. ``.github/workflows/ci.yml`` runs this same
+build-and-test sequence on every push and pull request.
 
 To build this documentation locally, without needing the Vulkan SDK or
 any other engine dependency::

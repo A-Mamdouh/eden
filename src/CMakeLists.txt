@@ -10,6 +10,7 @@ add_library(Eden STATIC
     Systems/TransformSystem.cpp
     Systems/ScriptSystem/ScriptSystem.cpp
     Systems/RenderSystem/RenderSystem.cpp
+    Systems/RenderSystem/NullRenderer.cpp
     Systems/RenderSystem/Vulkan/VulkanRenderer.cpp
 )
 

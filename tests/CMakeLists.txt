@@ -1,5 +1,10 @@
 add_executable(EdenTests
-    smoke_test.cpp
+    EventServiceTest.cpp
+    ClockServiceTest.cpp
+    SceneTest.cpp
+    TransformSystemTest.cpp
+    ScriptSystemTest.cpp
+    NullRendererTest.cpp
 )
 
 target_link_libraries(

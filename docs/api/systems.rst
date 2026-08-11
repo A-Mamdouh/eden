@@ -48,3 +48,15 @@ not something calling code should depend on directly.
 .. doxygenclass:: Eden::VulkanRenderer
    :members:
    :private-members:
+
+NullRenderer
+------------
+
+A second, headless ``Renderer`` implementation -- no window, no GPU, no
+graphics API calls. It exists to prove the contract above is genuinely
+backend-agnostic rather than a one-implementation abstraction, and to
+let engine logic be unit-tested without a GPU (see ``tests/``). Not
+wired into ``RenderSystem``; tests construct one directly.
+
+.. doxygenclass:: Eden::NullRenderer
+   :members:
