@@ -8,6 +8,7 @@ add_executable(EdenTests
     NullRendererTest.cpp
     RenderSystemMaterialTest.cpp
     BoundsTest.cpp
+    FrustumTest.cpp
 )
 
 target_link_libraries(

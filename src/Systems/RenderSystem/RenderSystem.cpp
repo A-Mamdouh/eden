@@ -3,6 +3,7 @@
 #include "Eden/Services/SceneService/Components.hpp"
 #include "Eden/Services/SceneService/Scene.hpp"
 #include "Eden/Services/SceneService/SceneService.hpp"
+#include "Eden/Systems/RenderSystem/Frustum.hpp"
 #include "Eden/Systems/RenderSystem/Renderer.hpp"
 #include "Systems/RenderSystem/GltfLoader.hpp"
 #include "Systems/RenderSystem/Vulkan/VulkanRendererFactory.hpp"
@@ -199,11 +200,16 @@ RenderFrame RenderSystem::buildFrameFromScene() const {
   }
 
   frame.camera = resolveCamera(*scene);
+  const Frustum frustum{frame.camera.projection * frame.camera.view};
 
   auto &registry = scene->getRegistry();
   for (const auto entity : registry.view<Renderable, WorldTransform>()) {
     const auto &renderable = registry.get<Renderable>(entity);
     const auto &worldTransform = registry.get<WorldTransform>(entity);
+    const AABB *bounds = resolveMeshBounds(renderable.mesh);
+    if (bounds && !frustum.intersects(*bounds, worldTransform.matrix)) {
+      continue;
+    }
     frame.commands.push_back(buildDrawCommand(renderable.mesh, renderable.material, worldTransform.matrix,
                                                registry.try_get<TintOverride>(entity)));
   }
@@ -214,6 +220,10 @@ RenderFrame RenderSystem::buildFrameFromScene() const {
     const auto *tintOverride = registry.try_get<TintOverride>(entity);
     for (const ModelPart &part : model.parts) {
       const Mat4 partTransform = worldTransform.matrix * part.localTransform;
+      const AABB *bounds = resolveMeshBounds(part.mesh);
+      if (bounds && !frustum.intersects(*bounds, partTransform)) {
+        continue;
+      }
       frame.commands.push_back(buildDrawCommand(part.mesh, part.material, partTransform, tintOverride));
     }
   }
