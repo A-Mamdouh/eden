@@ -11,6 +11,8 @@ class ConfigService;
 class EventService;
 class ISystem;
 class RenderSystem;
+class Scene;
+class SceneService;
 
 /// Composition root: owns every Service and System and drives the main
 /// loop. Construct one with an ApplicationConfig, then call run().
@@ -35,10 +37,15 @@ public:
   /// frame finishes.
   void stop();
 
+  /// Forwards to SceneService::loadScene(); the embedding application
+  /// never touches SceneService directly.
+  /// @param scene New active scene; the previous one, if any, is destroyed.
+  void loadScene(std::unique_ptr<Scene> scene);
+
 private:
   /// Constructs and initializes EventService, ConfigService,
-  /// ClockService, and RenderSystem, in that order. Called once from
-  /// the constructor.
+  /// ClockService, SceneService, TransformSystem, and RenderSystem, in
+  /// that order. Called once from the constructor.
   void init();
   /// Shuts down every system (reverse registration order) then every
   /// service. Called from run() after the loop exits, and from the
@@ -51,6 +58,7 @@ private:
   std::shared_ptr<EventService> eventService_{};
   std::unique_ptr<ConfigService> configService_{};
   std::unique_ptr<ClockService> clockService_{};
+  std::unique_ptr<SceneService> sceneService_{};
 
   std::vector<std::unique_ptr<ISystem>> systems_{};
   RenderSystem *renderSystem_{nullptr};

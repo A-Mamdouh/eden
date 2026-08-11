@@ -7,6 +7,7 @@ add_library(Eden STATIC
     Services/SceneService/Scene.cpp
     Services/SceneService/SceneService.cpp
     Systems/ISystem.cpp
+    Systems/TransformSystem.cpp
     Systems/RenderSystem/RenderSystem.cpp
     Systems/RenderSystem/Vulkan/VulkanRenderer.cpp
 )

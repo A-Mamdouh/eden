@@ -12,9 +12,12 @@ Engine, Services, and Systems
 subsystem and drives the main loop. Subsystems come in two kinds:
 
 - :cpp:class:`Eden::IService` -- not ticked by the main loop (config,
-  event bus, clock, scene ownership, background jobs).
-- :cpp:class:`Eden::ISystem` -- ticked once per frame via ``update(dt)``
-  (currently only rendering).
+  event bus, clock, scene ownership, background jobs). A Service holds
+  state; it has no per-frame behavior of its own.
+- :cpp:class:`Eden::ISystem` -- ticked once per frame via ``update(dt)``.
+  A System is the active per-frame computation, often *over* a Service's
+  state (e.g. :cpp:class:`Eden::TransformSystem` reads/writes the active
+  Scene's registry, but the Scene itself never ticks).
 
 Both share the same lifecycle shape: constructed with whatever config
 slice they need, then ``init()`` is called once with a weak reference to
@@ -29,22 +32,48 @@ What ``Engine::init()`` actually constructs, in order:
 1. ``EventService``
 2. ``ConfigService``
 3. ``ClockService``
-4. ``RenderSystem`` (the only ``ISystem`` today)
+4. ``SceneService``
+5. ``TransformSystem``
+6. ``RenderSystem``
 
-Each frame, ``Engine::run()`` calls ``ClockService::tick()`` for delta
-time, then ``update(dt)`` on every registered system.
+Systems run in registration order each frame, so ``TransformSystem``
+always sees this frame's fresh world transforms before ``RenderSystem``
+reads them. Each frame, ``Engine::run()`` calls ``ClockService::tick()``
+for delta time, then ``update(dt)`` on every registered system in that
+order.
 
 Built, but not wired into Engine
 ---------------------------------
 
-These compile into the ``Eden`` library but ``Engine::init()`` never
-constructs them:
+- ``JobService`` -- compiles into the ``Eden`` library, but
+  ``Engine::init()`` never constructs it, and it wouldn't actually run
+  jobs yet even if it did: nothing spawns worker threads or invokes its
+  ``workerLoop()``, so jobs passed to ``submit()`` would queue forever.
 
-- ``SceneService`` -- and ``Scene`` itself is currently an empty stub
-  struct, not an ECS registry wrapper.
-- ``JobService`` -- a worker-thread pool with no callers yet.
-- EnTT is fetched by CMake as a dependency but isn't used anywhere in the
-  active source tree.
+Scene
+-----
+
+:cpp:class:`Eden::Scene` wraps an ``entt::registry``; entities are
+created via :cpp:func:`Eden::Scene::createEntity`, which returns an
+:cpp:class:`Eden::Entity` wrapper for ergonomic
+``addComponent``/``getComponent`` calls. :cpp:class:`Eden::SceneService`
+owns the single active Scene and publishes ``SceneLoadedEvent`` when
+:cpp:func:`Eden::Engine::loadScene` swaps it -- the embedding application
+calls that, never ``SceneService`` directly, matching how it never
+touches any other subsystem.
+
+Components today: ``Transform`` (local position/rotation/scale),
+``EntityHierarchy`` (optional parent link), ``WorldTransform`` (computed,
+see below), and ``Renderable`` (a symbolic ``PrimitiveShape`` plus tint --
+entities reference a shape, not a raw mesh handle, so scene-authored
+content doesn't need to know a mesh was already uploaded to the GPU).
+
+:cpp:class:`Eden::TransformSystem` is the only writer of
+``WorldTransform``: every frame it walks entities with a ``Transform``,
+composing each one with its ``EntityHierarchy`` parent chain (cached
+per-frame to avoid recomputing shared ancestors). Everything else,
+``RenderSystem`` included, only ever reads ``WorldTransform`` -- nothing
+recomputes world placement on its own.
 
 Rendering
 ---------
@@ -58,11 +87,14 @@ description (camera + draw commands referencing mesh handles) and knows
 nothing about how the scene was built.
 
 :cpp:class:`Eden::RenderSystem` owns the SDL window and the active
-``Renderer`` instance, pumps SDL events each frame, and is the only place
-that will eventually walk a ``Scene`` to build a ``RenderFrame`` --
-``Renderer`` itself never sees ECS/entt types.
+``Renderer`` instance, pumps SDL events each frame, and walks the active
+Scene's ``Renderable``/``WorldTransform`` entities to build each
+``RenderFrame`` -- ``Renderer`` itself never sees ECS/entt types. It also
+owns a tiny built-in primitive mesh library (currently a triangle and a
+quad) that ``Renderable::shape`` resolves against; there is no real
+asset-loading system yet.
 
-The Vulkan backend is being rewritten against this contract; see the
+The Vulkan backend is implemented against this contract; see the
 Vulkan-specific header/source under ``Systems/RenderSystem/Vulkan/`` for
 current status rather than trusting this page to stay in sync on backend
 internals.
@@ -72,8 +104,16 @@ Known gaps
 
 - ``tests/smoke_test.cpp`` is a single ``SUCCEED()`` -- no real coverage
   yet.
-- No scene-graph traversal exists yet to build a ``RenderFrame`` from a
-  real scene; today's demo constructs one by hand.
+- No real asset loading: ``RenderSystem``'s primitive mesh library is
+  hardcoded C++, not loaded from a file format.
+- No camera component yet -- ``RenderSystem`` currently renders with an
+  identity view/projection regardless of scene content.
+- No animation/scripting system -- entities are static once loaded;
+  there's currently no principled place for a "value changes over time"
+  behavior to live (a prior hand-built demo frame had one, animating a
+  tint via ``sin(time)``, but that had no home once the demo became real
+  scene data instead of code, so it was dropped rather than left as a
+  RenderSystem-side special case).
 - Windowing goes through SDL2 (already cross-platform: Windows, Linux,
   and Apple Silicon macOS). Vulkan itself has no native macOS driver and
   requires MoltenVK via the LunarG Vulkan SDK; ``CMakeLists.txt``'s

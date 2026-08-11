@@ -4,6 +4,9 @@ Systems
 .. doxygenclass:: Eden::ISystem
    :members:
 
+.. doxygenclass:: Eden::TransformSystem
+   :members:
+
 .. doxygenclass:: Eden::RenderSystem
    :members:
 
@@ -14,6 +17,14 @@ Renderer types
 --------------
 
 .. doxygenfile:: RendererTypes.hpp
+
+Renderable component
+---------------------
+
+.. doxygenenum:: Eden::PrimitiveShape
+
+.. doxygenstruct:: Eden::Renderable
+   :members:
 
 Vulkan backend
 --------------

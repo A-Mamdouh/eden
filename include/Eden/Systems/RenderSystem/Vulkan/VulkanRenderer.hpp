@@ -51,12 +51,15 @@ private:
     vk::Buffer indexBuffer{};
     vk::DeviceMemory indexMemory{};
     std::uint32_t indexCount{0};
+    /// Mirrors the generation of the MeshHandle that owns this slot.
     std::uint32_t generation{0};
+    /// False for a freed slot awaiting reuse by a future createMesh().
     bool alive{false};
   };
 
   /// Runs every step below in order, once, from the constructor.
   void initVulkan();
+  /// Creates instance_, enabling validation layers if requested and available.
   void createInstance();
   /// Creates the SDL/Vulkan surface for window_.
   void createSurface();
@@ -64,9 +67,13 @@ private:
   /// families, swapchain support, and at least one usable surface
   /// format/present mode.
   void pickPhysicalDevice();
+  /// Creates device_ and its graphics/present queues from physicalDevice_.
   void createLogicalDevice();
+  /// Creates swapchain_ and populates swapchainImages_/swapchainImageFormat_/swapchainExtent_.
   void createSwapchain();
+  /// Creates one image view per entry in swapchainImages_.
   void createImageViews();
+  /// Creates renderPass_ (single color attachment, clear/store).
   void createRenderPass();
   /// (Re)builds the fixed triangle/quad pipeline from the precompiled
   /// triangle.vert/frag SPIR-V under EDEN_SHADER_DIR. Destroys any
@@ -74,8 +81,11 @@ private:
   /// swapchain recreation. Leaves pipelineReady_ false (not an error) if
   /// the shader binaries can't be loaded.
   void createGraphicsPipeline();
+  /// Creates one framebuffer per entry in swapchainImageViews_.
   void createFramebuffers();
+  /// Creates commandPool_ for the graphics queue family.
   void createCommandPool();
+  /// (Re)allocates one primary command buffer per swapchainFramebuffers_ entry.
   void allocateCommandBuffers();
   /// Creates imageAvailableSemaphore_, inFlightFence_, and the
   /// per-swapchain-image renderFinishedSemaphores_.
@@ -85,6 +95,8 @@ private:
   void createRenderFinishedSemaphores();
   void destroyRenderFinishedSemaphores();
 
+  /// Destroys the swapchain and everything sized by its image count
+  /// (image views, render pass, framebuffers); safe to call repeatedly.
   void cleanupSwapchain();
   /// Waits out a minimized/zero-size window, then rebuilds every
   /// swapchain-dependent object (swapchain, views, render pass,
@@ -95,15 +107,21 @@ private:
   void recordCommandBuffer(vk::CommandBuffer commandBuffer, std::uint32_t imageIndex,
                            const RenderFrame &frame);
 
+  /// @return Index of a physicalDevice_ memory type matching both
+  ///         `typeFilter` (a bitmask from a memory-requirements query)
+  ///         and `properties`; throws if none qualifies.
   std::uint32_t findMemoryType(std::uint32_t typeFilter, vk::MemoryPropertyFlags properties) const;
   /// Allocates a host-visible/coherent buffer of `size` bytes usable as
   /// `usage`; caller uploads via uploadToBuffer().
   std::pair<vk::Buffer, vk::DeviceMemory> createBuffer(vk::DeviceSize size,
                                                         vk::BufferUsageFlags usage) const;
+  /// Maps `memory`, copies `size` bytes from `data`, unmaps. `memory`
+  /// must be host-visible/coherent (i.e. from createBuffer()).
   void uploadToBuffer(vk::DeviceMemory memory, const void *data, vk::DeviceSize size) const;
   /// @param filename Shader binary name relative to EDEN_SHADER_DIR.
   /// @return SPIR-V words, or empty on any I/O failure (logged, not thrown).
   std::vector<std::uint32_t> loadShaderBinary(const std::string &filename) const;
+  /// Wraps precompiled SPIR-V `code` in a vk::ShaderModule; caller destroys it.
   vk::ShaderModule createShaderModule(const std::vector<std::uint32_t> &code) const;
 
   /// @return The live GpuMesh for `handle`, or nullptr if it's invalid,
@@ -139,6 +157,7 @@ private:
   bool pipelineReady_{false};
 
   vk::CommandPool commandPool_{};
+  /// Indexed by swapchain image index, like swapchainFramebuffers_.
   std::vector<vk::CommandBuffer> commandBuffers_{};
 
   vk::Semaphore imageAvailableSemaphore_{};

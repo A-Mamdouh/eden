@@ -19,4 +19,20 @@ Services
 .. doxygenclass:: Eden::SceneService
    :members:
 
-.. doxygenstruct:: Eden::Scene
+.. doxygenclass:: Eden::Scene
+   :members:
+
+.. doxygenclass:: Eden::Entity
+   :members:
+
+Scene components
+----------------
+
+.. doxygenstruct:: Eden::Transform
+   :members:
+
+.. doxygenstruct:: Eden::EntityHierarchy
+   :members:
+
+.. doxygenstruct:: Eden::WorldTransform
+   :members:
