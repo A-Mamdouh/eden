@@ -8,17 +8,30 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <limits>
 #include <optional>
 #include <set>
 #include <string_view>
 #include <stdexcept>
 
+#ifndef EDEN_SHADER_DIR
+#define EDEN_SHADER_DIR ""
+#endif
+
 namespace Eden {
 namespace {
 
 constexpr std::array<const char *, 1> kValidationLayers = {
     "VK_LAYER_KHRONOS_validation",
+};
+
+struct alignas(16) PushConstants {
+  Mat4 mvp{Mat4(1.0f)};
+  Vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
+  std::int32_t useVertexColor{0};
 };
 
 struct QueueFamilyIndices {
@@ -165,14 +178,31 @@ VulkanRenderer::~VulkanRenderer() {
     device_.waitIdle();
   }
 
+  for (auto &mesh : meshes_) {
+    if (!mesh.alive) {
+      continue;
+    }
+    device_.destroyBuffer(mesh.vertexBuffer);
+    device_.freeMemory(mesh.vertexMemory);
+    if (mesh.indexBuffer) {
+      device_.destroyBuffer(mesh.indexBuffer);
+      device_.freeMemory(mesh.indexMemory);
+    }
+  }
+
   if (inFlightFence_) {
     device_.destroyFence(inFlightFence_);
   }
-  if (renderFinishedSemaphore_) {
-    device_.destroySemaphore(renderFinishedSemaphore_);
-  }
+  destroyRenderFinishedSemaphores();
   if (imageAvailableSemaphore_) {
     device_.destroySemaphore(imageAvailableSemaphore_);
+  }
+
+  if (graphicsPipeline_) {
+    device_.destroyPipeline(graphicsPipeline_);
+  }
+  if (pipelineLayout_) {
+    device_.destroyPipelineLayout(pipelineLayout_);
   }
 
   cleanupSwapchain();
@@ -206,6 +236,7 @@ void VulkanRenderer::initVulkan() {
   createSwapchain();
   createImageViews();
   createRenderPass();
+  createGraphicsPipeline();
   createFramebuffers();
   createCommandPool();
   allocateCommandBuffers();
@@ -437,6 +468,171 @@ void VulkanRenderer::createRenderPass() {
   renderPass_ = device_.createRenderPass(renderPassInfo);
 }
 
+std::vector<std::uint32_t> VulkanRenderer::loadShaderBinary(const std::string &filename) const {
+  const std::filesystem::path fullPath = std::filesystem::path(EDEN_SHADER_DIR) / filename;
+
+  std::ifstream file(fullPath, std::ios::binary | std::ios::ate);
+  if (!file) {
+    spdlog::error("Failed to open shader file: {}", fullPath.string());
+    return {};
+  }
+
+  const std::streamsize size = file.tellg();
+  if (size <= 0 || (size % sizeof(std::uint32_t)) != 0) {
+    spdlog::error("Shader file has invalid size: {}", fullPath.string());
+    return {};
+  }
+
+  std::vector<std::uint32_t> buffer(static_cast<std::size_t>(size) / sizeof(std::uint32_t));
+  file.seekg(0);
+  file.read(reinterpret_cast<char *>(buffer.data()), size);
+  if (!file) {
+    spdlog::error("Failed to read shader file: {}", fullPath.string());
+    return {};
+  }
+
+  return buffer;
+}
+
+vk::ShaderModule VulkanRenderer::createShaderModule(const std::vector<std::uint32_t> &code) const {
+  vk::ShaderModuleCreateInfo createInfo{};
+  createInfo.codeSize = code.size() * sizeof(std::uint32_t);
+  createInfo.pCode = code.data();
+  return device_.createShaderModule(createInfo);
+}
+
+void VulkanRenderer::createGraphicsPipeline() {
+  if (graphicsPipeline_) {
+    device_.destroyPipeline(graphicsPipeline_);
+    graphicsPipeline_ = vk::Pipeline{};
+  }
+  if (pipelineLayout_) {
+    device_.destroyPipelineLayout(pipelineLayout_);
+    pipelineLayout_ = vk::PipelineLayout{};
+  }
+
+  const auto vertCode = loadShaderBinary("triangle.vert.spv");
+  const auto fragCode = loadShaderBinary("triangle.frag.spv");
+
+  if (vertCode.empty() || fragCode.empty()) {
+    spdlog::error("Failed to load precompiled shader binaries; skipping pipeline creation");
+    pipelineReady_ = false;
+    return;
+  }
+
+  vk::ShaderModule vertModule = createShaderModule(vertCode);
+  vk::ShaderModule fragModule = createShaderModule(fragCode);
+
+  vk::PipelineShaderStageCreateInfo vertStageInfo{};
+  vertStageInfo.stage = vk::ShaderStageFlagBits::eVertex;
+  vertStageInfo.module = vertModule;
+  vertStageInfo.pName = "main";
+
+  vk::PipelineShaderStageCreateInfo fragStageInfo{};
+  fragStageInfo.stage = vk::ShaderStageFlagBits::eFragment;
+  fragStageInfo.module = fragModule;
+  fragStageInfo.pName = "main";
+
+  vk::PipelineShaderStageCreateInfo shaderStages[] = {vertStageInfo, fragStageInfo};
+
+  vk::VertexInputBindingDescription bindingDescription{};
+  bindingDescription.binding = 0;
+  bindingDescription.stride = sizeof(Vertex);
+  bindingDescription.inputRate = vk::VertexInputRate::eVertex;
+
+  vk::VertexInputAttributeDescription attributeDescriptions[2]{};
+  attributeDescriptions[0].binding = 0;
+  attributeDescriptions[0].location = 0;
+  attributeDescriptions[0].format = vk::Format::eR32G32B32Sfloat;
+  attributeDescriptions[0].offset = offsetof(Vertex, position);
+
+  attributeDescriptions[1].binding = 0;
+  attributeDescriptions[1].location = 1;
+  attributeDescriptions[1].format = vk::Format::eR32G32B32Sfloat;
+  attributeDescriptions[1].offset = offsetof(Vertex, color);
+
+  vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
+  vertexInputInfo.vertexBindingDescriptionCount = 1;
+  vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+  vertexInputInfo.vertexAttributeDescriptionCount = 2;
+  vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions;
+
+  vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
+  inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
+  inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+  vk::PipelineViewportStateCreateInfo viewportState{};
+  viewportState.viewportCount = 1;
+  viewportState.scissorCount = 1;
+
+  vk::PipelineRasterizationStateCreateInfo rasterizer{};
+  rasterizer.depthClampEnable = VK_FALSE;
+  rasterizer.rasterizerDiscardEnable = VK_FALSE;
+  rasterizer.polygonMode = vk::PolygonMode::eFill;
+  rasterizer.cullMode = vk::CullModeFlagBits::eNone;
+  rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
+  rasterizer.depthBiasEnable = VK_FALSE;
+  rasterizer.lineWidth = 1.0f;
+
+  vk::PipelineMultisampleStateCreateInfo multisampling{};
+  multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+  multisampling.sampleShadingEnable = VK_FALSE;
+
+  vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
+  colorBlendAttachment.colorWriteMask =
+      vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+      vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+  colorBlendAttachment.blendEnable = VK_FALSE;
+
+  vk::PipelineColorBlendStateCreateInfo colorBlending{};
+  colorBlending.logicOpEnable = VK_FALSE;
+  colorBlending.attachmentCount = 1;
+  colorBlending.pAttachments = &colorBlendAttachment;
+
+  vk::DynamicState dynamicStates[] = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+  vk::PipelineDynamicStateCreateInfo dynamicState{};
+  dynamicState.dynamicStateCount = 2;
+  dynamicState.pDynamicStates = dynamicStates;
+
+  vk::PushConstantRange pushConstantRange{};
+  pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eVertex;
+  pushConstantRange.offset = 0;
+  pushConstantRange.size = sizeof(PushConstants);
+
+  vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
+  pipelineLayoutInfo.pushConstantRangeCount = 1;
+  pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+
+  pipelineLayout_ = device_.createPipelineLayout(pipelineLayoutInfo);
+
+  vk::GraphicsPipelineCreateInfo pipelineInfo{};
+  pipelineInfo.stageCount = 2;
+  pipelineInfo.pStages = shaderStages;
+  pipelineInfo.pVertexInputState = &vertexInputInfo;
+  pipelineInfo.pInputAssemblyState = &inputAssembly;
+  pipelineInfo.pViewportState = &viewportState;
+  pipelineInfo.pRasterizationState = &rasterizer;
+  pipelineInfo.pMultisampleState = &multisampling;
+  pipelineInfo.pDepthStencilState = nullptr;
+  pipelineInfo.pColorBlendState = &colorBlending;
+  pipelineInfo.pDynamicState = &dynamicState;
+  pipelineInfo.layout = pipelineLayout_;
+  pipelineInfo.renderPass = renderPass_;
+  pipelineInfo.subpass = 0;
+
+  auto result = device_.createGraphicsPipeline(nullptr, pipelineInfo);
+
+  device_.destroyShaderModule(fragModule);
+  device_.destroyShaderModule(vertModule);
+
+  if (result.result != vk::Result::eSuccess) {
+    throw std::runtime_error("Failed to create Vulkan graphics pipeline");
+  }
+
+  graphicsPipeline_ = result.value;
+  pipelineReady_ = true;
+}
+
 void VulkanRenderer::createFramebuffers() {
   swapchainFramebuffers_.clear();
   swapchainFramebuffers_.reserve(swapchainImageViews_.size());
@@ -485,33 +681,146 @@ void VulkanRenderer::createSyncObjects() {
   fenceInfo.flags = vk::FenceCreateFlagBits::eSignaled;
 
   imageAvailableSemaphore_ = device_.createSemaphore(semaphoreInfo);
-  renderFinishedSemaphore_ = device_.createSemaphore(semaphoreInfo);
   inFlightFence_ = device_.createFence(fenceInfo);
+
+  createRenderFinishedSemaphores();
 }
 
-void VulkanRenderer::recordCommandBuffer(vk::CommandBuffer commandBuffer,
-                                        std::uint32_t imageIndex) {
-  vk::CommandBufferBeginInfo beginInfo{};
-  beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+void VulkanRenderer::createRenderFinishedSemaphores() {
+  destroyRenderFinishedSemaphores();
 
-  commandBuffer.begin(beginInfo);
+  renderFinishedSemaphores_.resize(swapchainImages_.size());
+  vk::SemaphoreCreateInfo semaphoreInfo{};
+  for (auto &semaphore : renderFinishedSemaphores_) {
+    semaphore = device_.createSemaphore(semaphoreInfo);
+  }
+}
 
-  const std::array<float, 4> clearColor = {clearColor_.r, clearColor_.g,
-                                          clearColor_.b, clearColor_.a};
-  vk::ClearValue clearValue{};
-  clearValue.color = vk::ClearColorValue(clearColor);
+void VulkanRenderer::destroyRenderFinishedSemaphores() {
+  for (const auto semaphore : renderFinishedSemaphores_) {
+    if (semaphore) {
+      device_.destroySemaphore(semaphore);
+    }
+  }
+  renderFinishedSemaphores_.clear();
+}
 
-  vk::RenderPassBeginInfo renderPassInfo{};
-  renderPassInfo.renderPass = renderPass_;
-  renderPassInfo.framebuffer = swapchainFramebuffers_[imageIndex];
-  renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-  renderPassInfo.renderArea.extent = swapchainExtent_;
-  renderPassInfo.clearValueCount = 1;
-  renderPassInfo.pClearValues = &clearValue;
+std::uint32_t VulkanRenderer::findMemoryType(std::uint32_t typeFilter,
+                                             vk::MemoryPropertyFlags properties) const {
+  const vk::PhysicalDeviceMemoryProperties memProperties = physicalDevice_.getMemoryProperties();
 
-  commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
-  commandBuffer.endRenderPass();
-  commandBuffer.end();
+  for (std::uint32_t i = 0; i < memProperties.memoryTypeCount; ++i) {
+    if ((typeFilter & (1u << i)) != 0u &&
+        (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+      return i;
+    }
+  }
+
+  throw std::runtime_error("Failed to find suitable Vulkan memory type");
+}
+
+std::pair<vk::Buffer, vk::DeviceMemory> VulkanRenderer::createBuffer(
+    vk::DeviceSize size, vk::BufferUsageFlags usage) const {
+  vk::BufferCreateInfo bufferInfo{};
+  bufferInfo.size = size;
+  bufferInfo.usage = usage;
+  bufferInfo.sharingMode = vk::SharingMode::eExclusive;
+
+  vk::Buffer buffer = device_.createBuffer(bufferInfo);
+
+  const vk::MemoryRequirements memRequirements = device_.getBufferMemoryRequirements(buffer);
+
+  vk::MemoryAllocateInfo allocInfo{};
+  allocInfo.allocationSize = memRequirements.size;
+  allocInfo.memoryTypeIndex = findMemoryType(
+      memRequirements.memoryTypeBits,
+      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
+  vk::DeviceMemory memory = device_.allocateMemory(allocInfo);
+  device_.bindBufferMemory(buffer, memory, 0);
+
+  return {buffer, memory};
+}
+
+void VulkanRenderer::uploadToBuffer(vk::DeviceMemory memory, const void *data,
+                                    vk::DeviceSize size) const {
+  void *mapped = device_.mapMemory(memory, 0, size);
+  std::memcpy(mapped, data, static_cast<std::size_t>(size));
+  device_.unmapMemory(memory);
+}
+
+MeshHandle VulkanRenderer::createMesh(const MeshDesc &desc) {
+  GpuMesh mesh{};
+  mesh.vertexCount = static_cast<std::uint32_t>(desc.vertices.size());
+
+  const vk::DeviceSize vertexBytes = sizeof(Vertex) * desc.vertices.size();
+  std::tie(mesh.vertexBuffer, mesh.vertexMemory) =
+      createBuffer(vertexBytes, vk::BufferUsageFlagBits::eVertexBuffer);
+  uploadToBuffer(mesh.vertexMemory, desc.vertices.data(), vertexBytes);
+
+  if (!desc.indices.empty()) {
+    mesh.indexCount = static_cast<std::uint32_t>(desc.indices.size());
+    const vk::DeviceSize indexBytes = sizeof(std::uint32_t) * desc.indices.size();
+    std::tie(mesh.indexBuffer, mesh.indexMemory) =
+        createBuffer(indexBytes, vk::BufferUsageFlagBits::eIndexBuffer);
+    uploadToBuffer(mesh.indexMemory, desc.indices.data(), indexBytes);
+  }
+
+  mesh.alive = true;
+
+  std::uint32_t slot{};
+  if (!freeMeshSlots_.empty()) {
+    slot = freeMeshSlots_.back();
+    freeMeshSlots_.pop_back();
+    mesh.generation = meshes_[slot].generation + 1;
+    meshes_[slot] = mesh;
+  } else {
+    slot = static_cast<std::uint32_t>(meshes_.size());
+    mesh.generation = 1;
+    meshes_.push_back(mesh);
+  }
+
+  return MeshHandle{slot + 1, meshes_[slot].generation};
+}
+
+void VulkanRenderer::destroyMesh(MeshHandle handle) {
+  if (!handle.valid()) {
+    return;
+  }
+  const std::uint32_t slot = handle.id - 1;
+  if (slot >= meshes_.size()) {
+    return;
+  }
+
+  GpuMesh &mesh = meshes_[slot];
+  if (!mesh.alive || mesh.generation != handle.generation) {
+    return;
+  }
+
+  device_.destroyBuffer(mesh.vertexBuffer);
+  device_.freeMemory(mesh.vertexMemory);
+  if (mesh.indexBuffer) {
+    device_.destroyBuffer(mesh.indexBuffer);
+    device_.freeMemory(mesh.indexMemory);
+  }
+
+  mesh.alive = false;
+  freeMeshSlots_.push_back(slot);
+}
+
+const VulkanRenderer::GpuMesh *VulkanRenderer::findMesh(MeshHandle handle) const {
+  if (!handle.valid()) {
+    return nullptr;
+  }
+  const std::uint32_t slot = handle.id - 1;
+  if (slot >= meshes_.size()) {
+    return nullptr;
+  }
+  const GpuMesh &mesh = meshes_[slot];
+  if (!mesh.alive || mesh.generation != handle.generation) {
+    return nullptr;
+  }
+  return &mesh;
 }
 
 void VulkanRenderer::cleanupSwapchain() {
@@ -556,11 +865,86 @@ void VulkanRenderer::recreateSwapchain() {
   createSwapchain();
   createImageViews();
   createRenderPass();
+  createGraphicsPipeline();
   createFramebuffers();
   allocateCommandBuffers();
+  createRenderFinishedSemaphores();
 }
 
-void VulkanRenderer::drawFrame() {
+void VulkanRenderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, std::uint32_t imageIndex,
+                                         const RenderFrame &frame) {
+  vk::CommandBufferBeginInfo beginInfo{};
+  beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+
+  commandBuffer.begin(beginInfo);
+
+  const std::array<float, 4> clearColor = {frame.clearColor.r, frame.clearColor.g,
+                                          frame.clearColor.b, frame.clearColor.a};
+  vk::ClearValue clearValue{};
+  clearValue.color = vk::ClearColorValue(clearColor);
+
+  vk::RenderPassBeginInfo renderPassInfo{};
+  renderPassInfo.renderPass = renderPass_;
+  renderPassInfo.framebuffer = swapchainFramebuffers_[imageIndex];
+  renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
+  renderPassInfo.renderArea.extent = swapchainExtent_;
+  renderPassInfo.clearValueCount = 1;
+  renderPassInfo.pClearValues = &clearValue;
+
+  commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+
+  if (pipelineReady_ && !frame.commands.empty()) {
+    commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline_);
+
+    // Negative-height viewport flips Vulkan's Y-down NDC back to the Y-up
+    // convention glm::perspective/ortho/lookAt produce, without a matrix.
+    vk::Viewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = static_cast<float>(swapchainExtent_.height);
+    viewport.width = static_cast<float>(swapchainExtent_.width);
+    viewport.height = -static_cast<float>(swapchainExtent_.height);
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    commandBuffer.setViewport(0, viewport);
+
+    vk::Rect2D scissor{};
+    scissor.offset = vk::Offset2D{0, 0};
+    scissor.extent = swapchainExtent_;
+    commandBuffer.setScissor(0, scissor);
+
+    const Mat4 viewProjection = frame.camera.projection * frame.camera.view;
+
+    for (const auto &draw : frame.commands) {
+      const GpuMesh *mesh = findMesh(draw.mesh);
+      if (!mesh) {
+        continue;
+      }
+
+      PushConstants pushConstants{};
+      pushConstants.mvp = viewProjection * draw.transform;
+      pushConstants.color = Vec4{draw.tint.r, draw.tint.g, draw.tint.b, draw.tint.a};
+      pushConstants.useVertexColor = draw.useVertexColor ? 1 : 0;
+
+      commandBuffer.pushConstants(pipelineLayout_, vk::ShaderStageFlagBits::eVertex, 0,
+                                  sizeof(PushConstants), &pushConstants);
+
+      vk::DeviceSize offsets[] = {0};
+      commandBuffer.bindVertexBuffers(0, 1, &mesh->vertexBuffer, offsets);
+
+      if (mesh->indexBuffer) {
+        commandBuffer.bindIndexBuffer(mesh->indexBuffer, 0, vk::IndexType::eUint32);
+        commandBuffer.drawIndexed(mesh->indexCount, 1, 0, 0, 0);
+      } else {
+        commandBuffer.draw(mesh->vertexCount, 1, 0, 0);
+      }
+    }
+  }
+
+  commandBuffer.endRenderPass();
+  commandBuffer.end();
+}
+
+void VulkanRenderer::renderFrame(const RenderFrame &frame) {
   if (framebufferResized_) {
     framebufferResized_ = false;
     recreateSwapchain();
@@ -585,7 +969,7 @@ void VulkanRenderer::drawFrame() {
   device_.resetFences(inFlightFence_);
 
   commandBuffers_[imageIndex].reset();
-  recordCommandBuffer(commandBuffers_[imageIndex], imageIndex);
+  recordCommandBuffer(commandBuffers_[imageIndex], imageIndex, frame);
 
   vk::SubmitInfo submitInfo{};
 
@@ -599,7 +983,7 @@ void VulkanRenderer::drawFrame() {
   submitInfo.commandBufferCount = 1;
   submitInfo.pCommandBuffers = &commandBuffers_[imageIndex];
 
-  vk::Semaphore signalSemaphores[] = {renderFinishedSemaphore_};
+  vk::Semaphore signalSemaphores[] = {renderFinishedSemaphores_[imageIndex]};
   submitInfo.signalSemaphoreCount = 1;
   submitInfo.pSignalSemaphores = signalSemaphores;
 
