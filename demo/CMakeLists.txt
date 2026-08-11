@@ -1,4 +1,4 @@
-add_executable(Eden_Demo main.cpp )
+add_executable(Eden_Demo main.cpp DemoMeshes.cpp DemoScene.cpp)
 
 target_include_directories(Eden_Demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(Eden_Demo PRIVATE Eden spdlog::spdlog)
