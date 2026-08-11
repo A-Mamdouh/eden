@@ -98,8 +98,16 @@ void RenderSystem::destroyMaterial(MaterialHandle handle) {
   freeMaterialSlots_.push_back(index);
 }
 
-void RenderSystem::loadModel(const std::string &path, Scene &scene) {
-  loadGltfModel(path, *this, scene);
+Model RenderSystem::loadModel(const std::string &path) { return loadGltfModel(path, *this); }
+
+void RenderSystem::setActiveCamera(Entity camera) { activeCamera_ = camera.handle(); }
+
+Entity RenderSystem::activeCamera() const {
+  Scene *scene = sceneService_.activeScene();
+  if (!scene) {
+    return Entity{};
+  }
+  return Entity{activeCamera_, &scene->getRegistry()};
 }
 
 const Material *RenderSystem::resolveMaterial(MaterialHandle handle) const {
@@ -117,24 +125,42 @@ const Material *RenderSystem::resolveMaterial(MaterialHandle handle) const {
   return &slot.material;
 }
 
+DrawCommand RenderSystem::buildDrawCommand(MeshHandle mesh, MaterialHandle material,
+                                           const Mat4 &transform,
+                                           const TintOverride *tintOverride) const {
+  DrawCommand draw{};
+  draw.mesh = mesh;
+  draw.transform = transform;
+
+  if (const Material *resolvedMaterial = resolveMaterial(material)) {
+    draw.tint = resolvedMaterial->tint;
+    draw.useVertexColor = resolvedMaterial->useVertexColor;
+    draw.texture = resolvedMaterial->texture;
+  }
+
+  if (tintOverride) {
+    draw.tint = tintOverride->tint;
+    draw.useVertexColor = false;
+  }
+
+  return draw;
+}
+
 CameraDesc RenderSystem::resolveCamera(Scene &scene) const {
   const float aspect = windowHeight_ > 0
                             ? static_cast<float>(windowWidth_) / static_cast<float>(windowHeight_)
                             : 1.0f;
 
   auto &registry = scene.getRegistry();
-  for (const auto entity : registry.view<Camera>()) {
-    const auto &camera = registry.get<Camera>(entity);
-    if (!camera.active) {
-      continue;
-    }
+  if (registry.valid(activeCamera_) && registry.all_of<Camera>(activeCamera_)) {
+    const auto &camera = registry.get<Camera>(activeCamera_);
     return CameraDesc{camera.viewMatrix(), camera.projectionMatrix(aspect)};
   }
 
-  // No active Camera entity: fall back to an aspect-corrected orthographic
-  // projection (identity view) instead of a bare identity projection, so
-  // scenes authored without a Camera still render undistorted and fully in
-  // view regardless of window aspect ratio.
+  // No camera set (or it doesn't resolve in this scene): fall back to an
+  // aspect-corrected orthographic projection (identity view) instead of a
+  // bare identity projection, so scenes authored without a camera still
+  // render undistorted and fully in view regardless of window aspect ratio.
   return CameraDesc{Mat4{1.0f}, glm::ortho(-aspect, aspect, -1.0f, 1.0f, -1.0f, 1.0f)};
 }
 
@@ -153,23 +179,18 @@ RenderFrame RenderSystem::buildFrameFromScene() const {
   for (const auto entity : registry.view<Renderable, WorldTransform>()) {
     const auto &renderable = registry.get<Renderable>(entity);
     const auto &worldTransform = registry.get<WorldTransform>(entity);
+    frame.commands.push_back(buildDrawCommand(renderable.mesh, renderable.material, worldTransform.matrix,
+                                               registry.try_get<TintOverride>(entity)));
+  }
 
-    DrawCommand draw{};
-    draw.mesh = renderable.mesh;
-    draw.transform = worldTransform.matrix;
-
-    if (const Material *material = resolveMaterial(renderable.material)) {
-      draw.tint = material->tint;
-      draw.useVertexColor = material->useVertexColor;
-      draw.texture = material->texture;
+  for (const auto entity : registry.view<Model, WorldTransform>()) {
+    const auto &model = registry.get<Model>(entity);
+    const auto &worldTransform = registry.get<WorldTransform>(entity);
+    const auto *tintOverride = registry.try_get<TintOverride>(entity);
+    for (const ModelPart &part : model.parts) {
+      frame.commands.push_back(buildDrawCommand(part.mesh, part.material,
+                                                 worldTransform.matrix * part.localTransform, tintOverride));
     }
-
-    if (const auto *tintOverride = registry.try_get<TintOverride>(entity)) {
-      draw.tint = tintOverride->tint;
-      draw.useVertexColor = false;
-    }
-
-    frame.commands.push_back(draw);
   }
 
   return frame;

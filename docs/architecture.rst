@@ -70,9 +70,13 @@ Components today: ``Transform`` (local position/rotation/scale),
 see below), ``Camera`` (view/projection source for rendering), and
 ``Renderable`` (a ``MeshHandle`` plus a ``MaterialHandle`` -- both created
 via :cpp:func:`Eden::Engine::createMesh` /
-:cpp:func:`Eden::Engine::createMaterial`). An optional ``TintOverride``
-component lets a script animate one entity's color without mutating a
-Material other entities may share.
+:cpp:func:`Eden::Engine::createMaterial`), for single-mesh content. A
+loaded asset instead uses ``Model``, holding a list of ``ModelPart``
+(mesh + material + a transform local to the Model, see Rendering below)
+returned by :cpp:func:`Eden::Engine::loadModel`. Either way, one
+``Transform``/``WorldTransform`` on the owning entity places the whole
+thing. An optional ``TintOverride`` component lets a script animate one
+entity's color without mutating a Material other entities may share.
 
 :cpp:class:`Eden::TransformSystem` is the only writer of
 ``WorldTransform``: every frame it walks entities with a ``Transform``,
@@ -121,25 +125,53 @@ draws go through the same shader path.
 
 :cpp:class:`Eden::RenderSystem` owns the SDL window and the active
 ``Renderer`` instance, pumps SDL events each frame, and walks the active
-Scene's ``Renderable``/``WorldTransform`` entities to build each
-``RenderFrame`` -- ``Renderer`` itself never sees ECS/entt types. It also
-owns Material storage: :cpp:func:`Eden::Engine::createMaterial` stores a
-``Material`` (texture + tint + useVertexColor) and hands back a
-``MaterialHandle`` a ``Renderable`` references; RenderSystem resolves it
-into a ``DrawCommand``'s texture/tint/useVertexColor each frame.
+Scene's ``Renderable``/``WorldTransform`` and ``Model``/``WorldTransform``
+entities to build each ``RenderFrame`` -- ``Renderer`` itself never sees
+ECS/entt types. It also owns Material storage:
+:cpp:func:`Eden::Engine::createMaterial` stores a ``Material`` (texture +
+tint + useVertexColor) and hands back a ``MaterialHandle`` a
+``Renderable`` or ``ModelPart`` references; RenderSystem resolves it into
+a ``DrawCommand``'s texture/tint/useVertexColor each frame. A ``Model``
+entity draws one ``DrawCommand`` per part, each part's transform composed
+as the entity's ``WorldTransform`` times that part's own
+``ModelPart::localTransform``.
+
+RenderSystem renders from whichever entity is selected via
+:cpp:func:`Eden::Engine::setActiveCamera` (forwarded to
+:cpp:func:`Eden::RenderSystem::setActiveCamera`). It stores just that
+entity's id and re-resolves its ``Camera`` component against the active
+scene each frame rather than caching a reference -- EnTT's component-pool
+references aren't safe to hold onto between frames, since any structural
+change to that pool (anywhere, not just this entity) can invalidate them,
+where an id just fails to resolve cleanly instead. A ``Camera`` component
+on an entity that isn't selected has no effect on its own -- there's no
+per-component "active" flag -- which is what lets several coexist (e.g.
+sibling first-person/third-person camera entities under a player) without
+needing to know about each other. If no camera is set, or the selected
+entity doesn't resolve to a live ``Camera`` in the active scene,
+RenderSystem falls back to an aspect-corrected orthographic projection
+(identity view) so camera-less scenes still render undistorted regardless
+of window size.
 
 :cpp:func:`Eden::Engine::loadModel` is the real asset-loading path: it
 parses a glTF/GLB file (via the vendored ``cgltf``/``stb_image``
 single-header libraries), uploads its meshes and textures through
-``RenderSystem``, creates a ``Material`` per glTF material, and spawns
-one entity per glTF node -- ``Transform`` + ``EntityHierarchy`` mirroring
-the node hierarchy, plus a ``Renderable`` on nodes with a mesh -- into
-the active scene. Node rotations (glTF quaternions) are converted to
-``Transform::rotationEuler`` via a quaternion decomposition, which is
-fine for typical authored content but can lose precision or hit gimbal
-lock for extreme rotations. The demo still uploads a couple of
-hand-built primitive meshes directly via :cpp:func:`Eden::Engine::createMesh`
-alongside a loaded model, showing both paths side by side.
+``RenderSystem``, creates a ``Material`` per glTF material, and returns a
+``Model`` -- one ``ModelPart`` per mesh primitive in the file, each
+carrying its glTF node's world transform *within the file* (i.e.
+relative to whatever the caller treats as the model's origin) as a plain
+matrix. ``loadModel`` doesn't touch the scene at all; like
+``createMesh``/``createMaterial`` it's a pure resource call, so the
+caller attaches the result to whichever entity should own it --
+``entity.addComponent<Model>(std::move(model))`` -- alongside a
+``Transform`` to place it, exactly like any other component. Because
+each part's transform is a baked matrix rather than Eden's Euler-angle
+``Transform``, there's no quaternion-to-Euler precision loss for a
+model's internal node structure; only the one ``Transform`` the caller
+puts on the owning entity uses Euler angles. The demo still uploads a
+couple of hand-built primitive meshes directly via
+:cpp:func:`Eden::Engine::createMesh` alongside a loaded model, showing
+both paths side by side.
 
 The Vulkan backend is implemented against this contract; see the
 Vulkan-specific header/source under ``src/Systems/RenderSystem/Vulkan/``
@@ -207,7 +239,13 @@ Known gaps
 - The glTF loader supports triangle-list primitives with POSITION +
   TEXCOORD_0 and a base-color texture/factor -- no skinning/animation,
   vertex normals, multi-UV materials, or other PBR texture slots
-  (metallic-roughness, normal, emissive, ...) yet.
+  (metallic-roughness, normal, emissive, ...) yet. It also reads every
+  node in the file rather than respecting glTF's ``scene``/``scenes``
+  selection, which only matters for multi-scene files (uncommon).
+- A ``Model``'s parts are a flat, rigid list under one entity -- there's
+  no way to reference or move an individual part independently (e.g. one
+  node of a loaded rig), matching the lack of skinning/animation support
+  above.
 - Windowing goes through SDL2 (already cross-platform: Windows, Linux,
   and Apple Silicon macOS). Vulkan itself has no native macOS driver and
   requires MoltenVK via the LunarG Vulkan SDK; ``CMakeLists.txt``'s

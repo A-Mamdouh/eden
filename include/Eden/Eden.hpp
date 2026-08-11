@@ -4,6 +4,7 @@
 #include "Eden/Services/ConfigService/Config.hpp"
 #include "Eden/Services/SceneService/Components.hpp"
 #include "Eden/Services/SceneService/Scene.hpp"
+#include "Eden/Systems/RenderSystem/Model.hpp"
 #include "Eden/Systems/RenderSystem/RenderableComponent.hpp"
 #include "Eden/Systems/ScriptSystem/ScriptBehaviour.hpp"
 #include "Eden/Systems/ScriptSystem/ScriptComponent.hpp"

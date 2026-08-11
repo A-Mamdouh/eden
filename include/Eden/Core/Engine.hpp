@@ -1,7 +1,9 @@
 #pragma once
 
 #include "Eden/Services/ConfigService/Config.hpp"
+#include "Eden/Services/SceneService/Entity.hpp"
 #include "Eden/Systems/RenderSystem/Material.hpp"
+#include "Eden/Systems/RenderSystem/Model.hpp"
 #include "Eden/Systems/RenderSystem/RendererTypes.hpp"
 
 #include <memory>
@@ -44,12 +46,13 @@ public:
   /// @param scene New active scene; the previous one, if any, is destroyed.
   void loadScene(std::unique_ptr<Scene> scene);
 
-  /// Loads a glTF/GLB file's meshes, textures, and materials, and spawns
-  /// entities mirroring its node hierarchy into the active scene.
+  /// Loads a glTF/GLB file's meshes, textures, and materials, uploading
+  /// them through RenderSystem and returning the result as a Model --
+  /// attach it to an entity like any other component (paired with a
+  /// Transform to place it in the world) to actually put it in a scene.
   /// @param path Path to a .gltf or .glb file.
-  /// @throws std::runtime_error if there's no active scene (call
-  ///         loadScene() first), or on any parse/load failure.
-  void loadModel(const std::string &path);
+  /// @throws std::runtime_error on any parse/load failure.
+  Model loadModel(const std::string &path);
 
   /// Forwards to RenderSystem's owned Renderer; the embedding application
   /// creates meshes this way instead of touching RenderSystem/Renderer
@@ -74,6 +77,18 @@ public:
   /// @param handle Handle previously returned by createMaterial(); a
   ///        stale or already-destroyed handle silently no-ops.
   void destroyMaterial(MaterialHandle handle);
+
+  /// Selects which entity's Camera component RenderSystem renders from
+  /// each frame; forwards to RenderSystem::setActiveCamera(). Safe to
+  /// call before loadScene(), and safe across later scene changes -- see
+  /// RenderSystem::setActiveCamera() for why.
+  /// @param camera Entity expected to carry a Camera component.
+  void setActiveCamera(Entity camera);
+  /// @return The entity passed to the most recent setActiveCamera()
+  ///         call, resolved against the current active scene.
+  ///         Entity::valid() is false if none was set or it no longer
+  ///         exists in that scene.
+  Entity activeCamera() const;
 
 private:
   /// Constructs and initializes EventService, ConfigService,

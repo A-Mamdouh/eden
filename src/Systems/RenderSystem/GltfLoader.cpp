@@ -6,15 +6,11 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-#include "Eden/Services/SceneService/Components.hpp"
-#include "Eden/Services/SceneService/Scene.hpp"
 #include "Eden/Systems/RenderSystem/Material.hpp"
+#include "Eden/Systems/RenderSystem/Model.hpp"
 #include "Eden/Systems/RenderSystem/RenderSystem.hpp"
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <glm/gtx/matrix_decompose.hpp>
 
 #include <cstdint>
 #include <filesystem>
@@ -92,9 +88,8 @@ TextureDesc decodeImage(const cgltf_image &image, const std::filesystem::path &b
   return desc;
 }
 
-/// @return Eden-layout vertices and (always present, triangle-list)
-/// indices for `primitive`. Throws if it isn't a triangle list or is
-/// missing POSITION.
+/// @return `primitive`'s vertices/indices in Eden's layout. Throws if it
+/// isn't a triangle list or is missing POSITION.
 struct PrimitiveGeometry {
   std::vector<Vertex> vertices;
   std::vector<std::uint32_t> indices;
@@ -155,34 +150,9 @@ PrimitiveGeometry extractGeometry(const cgltf_primitive &primitive) {
   return geometry;
 }
 
-/// @return `node`'s local Transform, decomposed from cgltf's computed
-/// local matrix (itself correct whether the source file used a raw
-/// matrix or separate translation/rotation/scale). Rotation goes through
-/// a quaternion-to-Euler conversion -- fine for typical authored content,
-/// but can lose precision or hit gimbal lock for extreme/animated
-/// rotations, which Eden's Transform doesn't represent.
-Transform toEdenTransform(const cgltf_node &node) {
-  float matrixValues[16];
-  cgltf_node_transform_local(&node, matrixValues);
-  const Mat4 matrix = glm::make_mat4(matrixValues);
-
-  Vec3 scale{};
-  glm::quat rotation{};
-  Vec3 translation{};
-  Vec3 skew{};
-  Vec4 perspective{};
-  glm::decompose(matrix, scale, rotation, translation, skew, perspective);
-
-  Transform transform{};
-  transform.position = translation;
-  transform.rotationEuler = glm::degrees(glm::eulerAngles(rotation));
-  transform.scale = scale;
-  return transform;
-}
-
 } // namespace
 
-void loadGltfModel(const std::string &path, RenderSystem &renderSystem, Scene &scene) {
+Model loadGltfModel(const std::string &path, RenderSystem &renderSystem) {
   cgltf_options options{};
   cgltf_data *rawData = nullptr;
 
@@ -232,8 +202,7 @@ void loadGltfModel(const std::string &path, RenderSystem &renderSystem, Scene &s
   }
 
   // One Eden MeshHandle per cgltf_primitive -- a glTF mesh with several
-  // primitives (each with its own material) becomes several Renderables,
-  // spawned as sibling entities below (see the node loop).
+  // primitives (each with its own material) becomes several ModelParts.
   struct PrimitiveHandles {
     MeshHandle mesh{};
     MaterialHandle material{};
@@ -256,49 +225,28 @@ void loadGltfModel(const std::string &path, RenderSystem &renderSystem, Scene &s
     }
   }
 
-  // One Eden entity per glTF node, mirroring the hierarchy via
-  // EntityHierarchy (root nodes get no EntityHierarchy, same as any other
-  // Eden root entity).
-  std::unordered_map<const cgltf_node *, Entity> nodeEntities;
-
-  for (cgltf_size i = 0; i < data->nodes_count; ++i) {
-    const cgltf_node &node = data->nodes[i];
-    Entity entity = scene.createEntity();
-    entity.addComponent<Transform>(toEdenTransform(node));
-    nodeEntities.emplace(&node, entity);
-  }
-
-  for (cgltf_size i = 0; i < data->nodes_count; ++i) {
-    const cgltf_node &node = data->nodes[i];
-    if (!node.parent) {
-      continue;
-    }
-    nodeEntities.at(&node).addComponent<EntityHierarchy>(
-        EntityHierarchy{.parent = nodeEntities.at(node.parent).handle()});
-  }
-
-  // A node's first primitive reuses the node's own entity; any further
-  // primitives in the same mesh get their own entity parented to it, since
-  // an Eden entity can only carry one Renderable.
+  // One ModelPart per node's mesh primitive, positioned by the node's
+  // world transform within the file -- i.e. relative to whatever entity
+  // the caller attaches the returned Model to.
+  Model model{};
   for (cgltf_size i = 0; i < data->nodes_count; ++i) {
     const cgltf_node &node = data->nodes[i];
     if (!node.mesh) {
       continue;
     }
 
-    Entity nodeEntity = nodeEntities.at(&node);
+    float matrixValues[16];
+    cgltf_node_transform_world(&node, matrixValues);
+    const Mat4 nodeTransform = glm::make_mat4(matrixValues);
+
     for (cgltf_size p = 0; p < node.mesh->primitives_count; ++p) {
       const PrimitiveHandles &handles = primitiveHandles.at(&node.mesh->primitives[p]);
-
-      Entity target = nodeEntity;
-      if (p > 0) {
-        target = scene.createEntity();
-        target.addComponent<Transform>(Transform{});
-        target.addComponent<EntityHierarchy>(EntityHierarchy{.parent = nodeEntity.handle()});
-      }
-      target.addComponent<Renderable>(Renderable{.mesh = handles.mesh, .material = handles.material});
+      model.parts.push_back(
+          ModelPart{.mesh = handles.mesh, .material = handles.material, .localTransform = nodeTransform});
     }
   }
+
+  return model;
 }
 
 } // namespace Eden

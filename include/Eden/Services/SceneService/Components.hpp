@@ -46,12 +46,17 @@ struct WorldTransform {
   Mat4 matrix{1.0f};
 };
 
-/// Determines how the scene is viewed for rendering. RenderSystem uses
-/// the first active Camera it finds each frame; entities without one
-/// don't affect rendering. Deliberately standalone (not driven by
-/// Transform/WorldTransform) for now -- a free-fly camera will likely
-/// reshape this (yaw/pitch or a forward vector instead of a fixed
-/// target), so it isn't worth coupling to the hierarchy system yet.
+/// Placement and lens parameters for viewing the scene -- pure data, no
+/// notion of being "the" camera. RenderSystem renders from whichever
+/// entity is selected via RenderSystem::setActiveCamera(); a Camera
+/// component on an entity that isn't selected has no effect on its own,
+/// which is what lets several coexist (e.g. first-person/third-person
+/// views as sibling entities under a player, or one per viewport for
+/// split-screen later) without any of them needing to know about the
+/// others. Deliberately standalone (not driven by Transform/WorldTransform)
+/// for now -- a free-fly camera will likely reshape this (yaw/pitch or a
+/// forward vector instead of a fixed target), so it isn't worth coupling
+/// to the hierarchy system yet.
 struct Camera {
   Vec3 position{0.0f, 0.0f, 3.0f};
   /// World-space point the camera looks toward.
@@ -61,9 +66,6 @@ struct Camera {
   float fovDegrees{60.0f};
   float nearPlane{0.1f};
   float farPlane{100.0f};
-  /// If multiple Camera entities exist, the first active one (in scene
-  /// iteration order) is used; the rest are ignored.
-  bool active{true};
 
   /// @return World-to-view matrix looking from position toward target.
   Mat4 viewMatrix() const { return glm::lookAt(position, target, up); }

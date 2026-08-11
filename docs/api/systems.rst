@@ -36,6 +36,15 @@ Material
 .. doxygenstruct:: Eden::Material
    :members:
 
+Model
+-----
+
+.. doxygenstruct:: Eden::Model
+   :members:
+
+.. doxygenstruct:: Eden::ModelPart
+   :members:
+
 Script components
 ------------------
 
@@ -60,7 +69,8 @@ glTF loading
 ------------
 
 ``Engine::loadModel()`` (documented above under Core) is the public
-entry point; the cgltf/stb_image-based implementation
+entry point -- it returns a ``Model`` (above) for the caller to attach to
+an entity. The cgltf/stb_image-based implementation
 (``src/Systems/RenderSystem/GltfLoader.cpp``) is intentionally outside
 this reference for the same reason as the Vulkan backend -- it's a
 private implementation detail (``RenderSystem::loadModel()``, not part

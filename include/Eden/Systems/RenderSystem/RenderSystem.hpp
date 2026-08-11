@@ -2,7 +2,9 @@
 
 #include "Eden/Systems/ISystem.hpp"
 #include "Eden/Services/ConfigService/Config.hpp"
+#include "Eden/Services/SceneService/Entity.hpp"
 #include "Eden/Systems/RenderSystem/Material.hpp"
+#include "Eden/Systems/RenderSystem/Model.hpp"
 #include "Eden/Systems/RenderSystem/RenderableComponent.hpp"
 #include "Eden/Systems/RenderSystem/RendererTypes.hpp"
 
@@ -17,8 +19,9 @@ class Scene;
 class SceneService;
 
 /// Owns the SDL window and the active Renderer backend; polls window/OS
-/// events and drives one Renderer::renderFrame() per update(), built
-/// from the active Scene's Renderable/WorldTransform entities.
+/// events and drives one Renderer::renderFrame() per update(), built from
+/// the active Scene's Renderable/Model entities (each paired with a
+/// WorldTransform).
 class RenderSystem : public ISystem {
 
   public:
@@ -60,29 +63,52 @@ class RenderSystem : public ISystem {
   ///        stale or already-destroyed handle silently no-ops.
   void destroyMaterial(MaterialHandle handle);
 
-  /// Loads a glTF/GLB file's meshes, textures, and materials, and spawns
-  /// entities mirroring its node hierarchy into `scene`. See
-  /// Engine::loadModel(), the intended entry point.
+  /// Loads a glTF/GLB file's meshes, textures, and materials, returning
+  /// them as a Model. See Engine::loadModel(), the intended entry point.
   /// @throws std::runtime_error on any parse/load failure.
-  void loadModel(const std::string &path, Scene &scene);
+  Model loadModel(const std::string &path);
+
+  /// Selects which entity's Camera component to render from each frame.
+  /// Stores just the entity id and re-resolves it against whichever
+  /// scene is active at render time (see resolveCamera()) -- safe to
+  /// call before the scene it refers to is even loaded, and safe across
+  /// scene changes (a stale id simply fails to resolve).
+  /// @param camera Entity expected to carry a Camera component; one that
+  ///        doesn't is silently skipped at render time, same as no
+  ///        camera being set at all.
+  void setActiveCamera(Entity camera);
+  /// @return The entity passed to the most recent setActiveCamera()
+  ///         call, resolved against the current active scene.
+  ///         Entity::valid() is false if none was set, there's no active
+  ///         scene, or the entity no longer exists in it.
+  Entity activeCamera() const;
 
   private:
   /// Creates the SDL window and the Vulkan renderer.
   void onInit() override;
 
-  /// Walks the active scene's Renderable+WorldTransform entities into a
-  /// RenderFrame. @return A frame with just the clear color and no draw
-  /// commands if there's no active scene.
+  /// Walks the active scene's Renderable+WorldTransform and
+  /// Model+WorldTransform entities into a RenderFrame. @return A frame
+  /// with just the clear color and no draw commands if there's no active
+  /// scene.
   RenderFrame buildFrameFromScene() const;
-  /// @param scene Scene to search for a Camera entity.
-  /// @return The first active Camera's view/projection, using the
-  ///         current window aspect ratio. If none is found, an
-  ///         aspect-corrected orthographic projection (identity view) so
-  ///         camera-less scenes still render undistorted.
+  /// @param scene Scene to resolve the entity set via setActiveCamera()
+  ///        against.
+  /// @return That camera's view/projection, using the current window
+  ///         aspect ratio. If none is set, or it doesn't resolve to a
+  ///         live Camera in `scene`, an aspect-corrected orthographic
+  ///         projection (identity view) so camera-less scenes still
+  ///         render undistorted.
   CameraDesc resolveCamera(Scene &scene) const;
   /// @return The live Material for `handle`, or nullptr if it's invalid,
   ///         out of range, destroyed, or from a reused (stale) slot.
   const Material *resolveMaterial(MaterialHandle handle) const;
+  /// Resolves `material` into tint/useVertexColor/texture (Material's
+  /// defaults if invalid/destroyed), then applies `tintOverride` if
+  /// present. Shared by the Renderable and Model draw-building loops in
+  /// buildFrameFromScene().
+  DrawCommand buildDrawCommand(MeshHandle mesh, MaterialHandle material, const Mat4 &transform,
+                               const TintOverride *tintOverride) const;
 
   Config::WindowConfig windowConfig_;
   Config::RenderConfig renderConfig_;
@@ -96,6 +122,12 @@ class RenderSystem : public ISystem {
   /// active Camera's aspect ratio.
   int windowWidth_{0};
   int windowHeight_{0};
+
+  /// Entity id selected via setActiveCamera(); re-resolved against the
+  /// active scene each frame in resolveCamera() rather than cached as a
+  /// reference, since EnTT component references aren't safe to hold
+  /// across frames.
+  entt::entity activeCamera_{entt::null};
 
   /// Tracks just enough to validate handle lifetime, mirroring
   /// VulkanRenderer's mesh/texture slot+generation scheme.

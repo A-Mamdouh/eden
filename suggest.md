@@ -1,6 +1,6 @@
 Pulling together everything suggested across this session into one prioritized list:
 
-1. ~~Real camera~~ — Done. `Camera` component + `RenderSystem::resolveCamera()`, tracking window aspect ratio on resize. Scenes without a Camera entity fall back to an aspect-corrected orthographic projection (not a bare identity matrix), so camera-less content still renders undistorted.
+1. ~~Real camera~~ — Done. `Camera` component (pure data, no "active" flag) + explicit `Engine::setActiveCamera(Entity)`/`activeCamera()`. `RenderSystem` stores just the selected entity's id and re-resolves its `Camera` against the active scene each frame, rather than caching a reference (EnTT component-pool references aren't safe to hold across frames). Scenes without a camera set fall back to an aspect-corrected orthographic projection (not a bare identity matrix), so camera-less content still renders undistorted. Explicit selection (vs. an implicit "first camera found" or a per-component active flag) was chosen deliberately: it doesn't depend on EnTT iteration order, and it scales to multiple simultaneous cameras (split-screen, first/third-person view switching) without a single-slot bottleneck.
 
 2. Hierarchy demo scene (cheap, no new engine code) — a parent-child arrangement of entities (e.g. a simple solar-system-style demo). Pure content using EntityHierarchy/TransformSystem, which already exist. The fastest way to make "extensibility" visible rather than argued. (The glTF test asset's two-node hierarchy exercises the mechanism, but there's no dedicated demo content showing it off yet.)
 
@@ -10,7 +10,7 @@ Pulling together everything suggested across this session into one prioritized l
 
 5. ~~Textures/materials~~ — Done. `TextureHandle`/`TextureDesc` through the `Renderer` contract (staging buffer, image, sampler, descriptor sets in `VulkanRenderer`; matching bookkeeping in `NullRenderer`), plus a `Material` concept (`RenderSystem`-owned, texture + tint + useVertexColor) that `Renderable` now references via `MeshHandle` + `MaterialHandle` instead of the old symbolic `PrimitiveShape`.
 
-6. ~~Asset loading~~ — Done. cgltf + stb_image vendored; `Engine::loadModel()` parses a glTF/GLB file, uploads its meshes/textures, creates Materials, and spawns entities mirroring the node hierarchy (Transform + EntityHierarchy + Renderable). Verified against a hand-authored two-node textured-quad test asset (`demo/assets/quad.gltf`).
+6. ~~Asset loading~~ — Done. cgltf + stb_image vendored; `Engine::loadModel()` parses a glTF/GLB file, uploads its meshes/textures, creates Materials, and returns a `Model` (a list of mesh+material+local-transform parts) that the caller attaches to an entity — `entity.addComponent<Model>(std::move(model))` alongside a `Transform`, exactly like `Renderable`. That entity's Transform moves/rotates/scales the whole loaded asset as a unit. (First cut spawned a whole entity hierarchy per glTF node instead and never handed anything back to the caller — no way to place or move what you'd just loaded. Reworked into the `Model` component before that shipped.) Verified against a hand-authored two-node textured-quad test asset (`demo/assets/quad.gltf`).
 
 7. "Extending Eden" docs page (cheap, do alongside anything above) — leverages the Sphinx pipeline that already exists.
 
