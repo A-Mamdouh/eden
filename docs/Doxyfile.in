@@ -1,0 +1,32 @@
+PROJECT_NAME           = "@EDEN_ENGINE_NAME@"
+PROJECT_NUMBER         = "@EDEN_ENGINE_VERSION@"
+PROJECT_BRIEF          = "@EDEN_ENGINE_DESCRIPTION@"
+
+OUTPUT_DIRECTORY       = @DOXYGEN_OUTPUT_DIR@
+INPUT                  = @DOXYGEN_INPUT_DIR@
+
+RECURSIVE              = YES
+FILE_PATTERNS          = *.hpp *.h
+
+GENERATE_HTML          = NO
+GENERATE_LATEX         = NO
+GENERATE_XML           = YES
+XML_OUTPUT              = xml
+
+QUIET                  = YES
+WARN_IF_UNDOCUMENTED   = NO
+
+JAVADOC_AUTOBRIEF       = YES
+
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = YES
+PREDEFINED             = EDEN_ENABLE_VULKAN
+
+EXTRACT_ALL             = YES
+# Private members are extracted so VulkanRenderer's implementation can be
+# shown via Breathe's :private-members: option (docs/api/systems.rst);
+# other classes' curated pages only request :members:, so this doesn't
+# change what they render.
+EXTRACT_PRIVATE        = YES
+EXTRACT_STATIC          = NO

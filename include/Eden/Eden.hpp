@@ -1,27 +1,23 @@
 #pragma once
 
-#ifndef EDEN_ENGINE_EDEN_HPP
-#define EDEN_ENGINE_EDEN_HPP
+#include "Eden/Core/Engine.hpp"
+#include "Eden/Services/ConfigService/Config.hpp"
+#include "Eden/Services/SceneService/Components.hpp"
+#include "Eden/Services/SceneService/Scene.hpp"
+#include "Eden/Systems/InputSystem/InputSystem.hpp"
+#include "Eden/Systems/InputSystem/Key.hpp"
+#include "Eden/Systems/RenderSystem/Model.hpp"
+#include "Eden/Systems/RenderSystem/RenderableComponent.hpp"
+#include "Eden/Systems/ScriptSystem/ScriptBehaviour.hpp"
+#include "Eden/Systems/ScriptSystem/ScriptComponent.hpp"
 
-#include "Eden/EdenConfig.hpp"
-#include "Eden/core/Config.hpp"
-#include "Eden/core/Math.hpp"
-#include "Eden/core/Application.hpp"
-#include "Eden/core/Configuration.hpp"
-#include "Eden/core/Engine.hpp"
-#include "Eden/core/EventSystem.hpp"
-#include "Eden/platform/Input.hpp"
-#include "Eden/ecs/Component.hpp"
-#include "Eden/ecs/Entity.hpp"
-#include "Eden/physics/Physics.hpp"
-#include "Eden/platform/Window.hpp"
-#include "Eden/ecs/CameraComponent.hpp"
-#include "Eden/render/Material.hpp"
-#include "Eden/render/RenderSystem.hpp"
-#include "Eden/render/Renderer.hpp"
-#include "Eden/scene/Scene.hpp"
-#include "Eden/scene/SceneManager.hpp"
-#include "Eden/script/Script.hpp"
-#include "Eden/script/ScriptSystem.hpp"
+/// Single umbrella header for applications embedding Eden: pulls in
+/// Engine, the config types needed to construct one, Scene plus the
+/// components needed to populate one for Engine::loadScene(),
+/// ScriptBehaviour for attaching per-entity behavior, and InputSystem/Key
+/// for reading keyboard/mouse state from within one.
+namespace Eden {
+/// Config type an application fills out and passes to Engine's constructor.
+using AppConfig = Config::ApplicationConfig;
+} // namespace Eden
 
-#endif // EDEN_ENGINE_EDEN_HPP

@@ -1,6 +1,14 @@
 add_executable(EdenTests
-    EngineArchitectureTests.cpp
-    InputTests.cpp
+    EventServiceTest.cpp
+    ClockServiceTest.cpp
+    SceneTest.cpp
+    TransformSystemTest.cpp
+    ScriptSystemTest.cpp
+    InputSystemTest.cpp
+    NullRendererTest.cpp
+    RenderSystemMaterialTest.cpp
+    BoundsTest.cpp
+    FrustumTest.cpp
 )
 
 target_link_libraries(

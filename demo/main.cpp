@@ -1,33 +1,23 @@
-#include <memory>
+#include "DemoMeshes.hpp"
+#include "DemoScene.hpp"
+
 #include <spdlog/spdlog.h>
 #include <Eden/Eden.hpp>
-#include "scenes/demo.hpp"
 
-class DemoApplication : public Eden::Application
-{
-public:
-    using Eden::Application::Application;
-
-    DemoApplication(Eden::EngineConfig& config)
-    : Application(config)
-    {}
-
-protected:
-    std::unique_ptr<Eden::Scene> createInitialScene() override
-    {
-        return std::make_unique<Eden::DemoScene>();
-    }
-};
+#include <string>
 
 int main()
 {
-    Eden::EngineConfig config;
-    config.window.title = "Eden Demo";
-    config.render.enableValidationLayers = true;
-    config.render.targetFrameRate = 144;
-    auto app = std::make_unique<DemoApplication>(config);
-    Eden::Application::setInstance(std::move(app));
+    Eden::AppConfig config;
+    config.engine.window.title = "Eden Demo";
+    config.engine.render.enableValidationLayers = true;
+    config.engine.render.targetFrameRate = 144;
+
+    Eden::Engine engine(config);
+    const Demo::DemoMeshes meshes = Demo::createDemoMeshes(engine);
+    Eden::Model signModel = engine.loadModel(std::string(EDEN_DEMO_ASSETS_DIR) + "/quad.gltf");
+    engine.loadScene(Demo::buildDemoScene(engine, meshes, std::move(signModel)));
 
     spdlog::info("Demo application initialized; entering run loop");
-    return Eden::Application::getInstance().run();
+    return engine.run();
 }
