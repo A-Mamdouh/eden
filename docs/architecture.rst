@@ -215,6 +215,31 @@ the test suite (below) something to construct a ``Renderer`` against
 without a GPU. It isn't wired into ``RenderSystem``; only tests use it
 directly.
 
+Culling
+-------
+
+:cpp:class:`Eden::RenderSystem` skips draw commands for geometry the
+active camera's frustum can't see, rather than submitting everything in
+the scene to the backend every frame. Each mesh gets an object-space
+:cpp:struct:`Eden::AABB` (min/max over its vertex positions) computed
+once in ``createMesh()`` -- the only point that ever sees the mesh's raw
+vertex data, since the backend owns the uploaded buffer afterward and
+there's no readback path. ``buildFrameFromScene()`` builds one
+:cpp:class:`Eden::Frustum` per frame from ``projection * view``,
+extracting its six planes via the standard Gribb/Hartmann method
+(adjusted for Eden's Vulkan-style [0, 1] NDC depth range rather than
+OpenGL's [-1, 1] -- see ``Frustum.cpp`` for the derivation), then tests
+each ``Renderable``/``ModelPart`` mesh's AABB against it -- transformed
+into world space by that entity's ``WorldTransform`` and, for a
+``ModelPart``, its own ``localTransform`` too -- before building a
+``DrawCommand``. The test re-encloses the transformed box in a new
+axis-aligned box rather than testing eight rotated corners against each
+plane directly, so it's conservative under rotation: it never culls
+something actually visible, only ever something fully outside every
+plane. A mesh whose bounds can't be resolved (stale or invalid handle)
+is never culled -- absence of data means "don't know", not "not
+visible".
+
 Backend header firewall
 ------------------------
 
@@ -251,10 +276,13 @@ hierarchy composition, ``ScriptSystem``'s start/update contract,
 either -- ``SDL_GetKeyboardState``/``SDL_PumpEvents``/
 ``SDL_GetRelativeMouseState`` are all safe to call before ``SDL_Init``,
 which is what makes this testable without a window),
-``NullRenderer``'s mesh/texture handle lifecycle, and
-``RenderSystem``'s Material handle lifecycle (constructed without
-calling ``init()``, so no real window/GPU is ever touched) -- all pure
-logic, none of it needs a window or GPU, which is what makes it possible
+``NullRenderer``'s mesh/texture handle lifecycle, ``RenderSystem``'s
+Material handle lifecycle (constructed without calling ``init()``, so
+no real window/GPU is ever touched), and ``AABB``/``Frustum``'s culling
+math (built directly from ``Camera::viewMatrix()``/``projectionMatrix()``
+with hand-picked object positions relative to the near/far/side planes,
+no ``RenderSystem`` or scene involved) -- all pure logic, none of it
+needs a window or GPU, which is what makes it possible
 to run in CI without a display or real Vulkan driver (see
 ``.github/workflows/ci.yml``, which still needs the Vulkan SDK installed
 to *build* ``VulkanRenderer.cpp`` and link the loader, just not to run

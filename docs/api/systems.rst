@@ -26,6 +26,17 @@ Renderer types
 
 .. doxygenfile:: RendererTypes.hpp
 
+Culling
+-------
+
+.. doxygenstruct:: Eden::AABB
+   :members:
+
+.. doxygenfunction:: Eden::computeBounds
+
+.. doxygenclass:: Eden::Frustum
+   :members:
+
 Renderable component
 ---------------------
 
