@@ -44,8 +44,8 @@ public:
 
 private:
   /// Constructs and initializes EventService, ConfigService,
-  /// ClockService, SceneService, TransformSystem, and RenderSystem, in
-  /// that order. Called once from the constructor.
+  /// ClockService, SceneService, ScriptSystem, TransformSystem, and
+  /// RenderSystem, in that order. Called once from the constructor.
   void init();
   /// Shuts down every system (reverse registration order) then every
   /// service. Called from run() after the loop exits, and from the

@@ -4,6 +4,9 @@ Systems
 .. doxygenclass:: Eden::ISystem
    :members:
 
+.. doxygenclass:: Eden::ScriptSystem
+   :members:
+
 .. doxygenclass:: Eden::TransformSystem
    :members:
 
@@ -24,6 +27,15 @@ Renderable component
 .. doxygenenum:: Eden::PrimitiveShape
 
 .. doxygenstruct:: Eden::Renderable
+   :members:
+
+Script components
+------------------
+
+.. doxygenclass:: Eden::ScriptBehaviour
+   :members:
+
+.. doxygenstruct:: Eden::ScriptComponent
    :members:
 
 Vulkan backend

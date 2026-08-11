@@ -5,6 +5,7 @@
 #include "Eden/Services/EventService/EventService.hpp"
 #include "Eden/Services/SceneService/SceneService.hpp"
 #include "Eden/Systems/RenderSystem/RenderSystem.hpp"
+#include "Eden/Systems/ScriptSystem/ScriptSystem.hpp"
 #include "Eden/Systems/TransformSystem.hpp"
 
 #include <spdlog/spdlog.h>
@@ -29,6 +30,13 @@ void Engine::init() {
 
   sceneService_ = std::make_unique<SceneService>();
   sceneService_->init(eventService_);
+
+  // Scripts run first so any component writes they make (Transform,
+  // Renderable, ...) are visible to TransformSystem/RenderSystem the
+  // same frame, not one frame late.
+  auto scriptSystem = std::make_unique<ScriptSystem>(*sceneService_);
+  scriptSystem->init(eventService_);
+  systems_.push_back(std::move(scriptSystem));
 
   auto transformSystem = std::make_unique<TransformSystem>(*sceneService_);
   transformSystem->init(eventService_);

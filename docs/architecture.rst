@@ -33,14 +33,17 @@ What ``Engine::init()`` actually constructs, in order:
 2. ``ConfigService``
 3. ``ClockService``
 4. ``SceneService``
-5. ``TransformSystem``
-6. ``RenderSystem``
+5. ``ScriptSystem``
+6. ``TransformSystem``
+7. ``RenderSystem``
 
-Systems run in registration order each frame, so ``TransformSystem``
-always sees this frame's fresh world transforms before ``RenderSystem``
-reads them. Each frame, ``Engine::run()`` calls ``ClockService::tick()``
-for delta time, then ``update(dt)`` on every registered system in that
-order.
+Systems run in registration order each frame: ``ScriptSystem`` before
+``TransformSystem`` so a script's ``Transform``/``Renderable`` writes are
+already in place when world transforms get computed, and
+``TransformSystem`` before ``RenderSystem`` so rendering always reads
+this frame's fresh world transforms, never last frame's. Each frame,
+``Engine::run()`` calls ``ClockService::tick()`` for delta time, then
+``update(dt)`` on every registered system in that order.
 
 Built, but not wired into Engine
 ---------------------------------
@@ -75,6 +78,30 @@ per-frame to avoid recomputing shared ancestors). Everything else,
 ``RenderSystem`` included, only ever reads ``WorldTransform`` -- nothing
 recomputes world placement on its own.
 
+Scripting
+---------
+
+An entity gets custom per-frame behavior by attaching a
+:cpp:class:`Eden::ScriptComponent` holding a
+:cpp:class:`Eden::ScriptBehaviour`. :cpp:class:`Eden::ScriptSystem` walks
+every ``ScriptComponent`` each frame: the first tick calls ``onStart()``,
+every tick (including that first one) calls ``onUpdate(entity, dt)``.
+Both hooks receive the owning :cpp:class:`Eden::Entity`, so a script
+reads/writes its own components the same way any other code does --
+``entity.getComponent<Renderable>().tint = ...``, for example.
+
+Deliberately minimal for now: a script only ever sees its own entity and
+``dt``, nothing else (no input, no querying other entities, no access to
+Renderer/EventService). There's no ``InputSystem`` yet for a script to
+react to, so this hasn't been a real limitation so far; when one is
+needed, it can be added as a further argument to ``onUpdate`` without
+breaking existing scripts.
+
+``demo/scripts/PulseTint.hpp`` is the reference example: it animates a
+``Renderable``'s tint through a ``sin(time)`` pulse, which is what the
+demo's quad used to do as hardcoded logic inside ``RenderSystem`` before
+the scene system existed.
+
 Rendering
 ---------
 
@@ -108,12 +135,8 @@ Known gaps
   hardcoded C++, not loaded from a file format.
 - No camera component yet -- ``RenderSystem`` currently renders with an
   identity view/projection regardless of scene content.
-- No animation/scripting system -- entities are static once loaded;
-  there's currently no principled place for a "value changes over time"
-  behavior to live (a prior hand-built demo frame had one, animating a
-  tint via ``sin(time)``, but that had no home once the demo became real
-  scene data instead of code, so it was dropped rather than left as a
-  RenderSystem-side special case).
+- No ``InputSystem`` yet, so scripts can't react to keyboard/mouse --
+  see the Scripting section above.
 - Windowing goes through SDL2 (already cross-platform: Windows, Linux,
   and Apple Silicon macOS). Vulkan itself has no native macOS driver and
   requires MoltenVK via the LunarG Vulkan SDK; ``CMakeLists.txt``'s

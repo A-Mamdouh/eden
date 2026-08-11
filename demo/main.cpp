@@ -2,6 +2,8 @@
 #include <spdlog/spdlog.h>
 #include <Eden/Eden.hpp>
 
+#include "scripts/PulseTint.hpp"
+
 namespace {
 
 std::unique_ptr<Eden::Scene> buildDemoScene() {
@@ -18,6 +20,7 @@ std::unique_ptr<Eden::Scene> buildDemoScene() {
       .tint = Eden::Color{0.3f, 0.6f, 1.0f, 1.0f},
       .useVertexColor = false,
   });
+  quad.addComponent<Eden::ScriptComponent>(Eden::ScriptComponent{.behaviour = std::make_unique<PulseTint>()});
 
   return scene;
 }
