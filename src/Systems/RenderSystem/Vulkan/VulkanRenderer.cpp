@@ -674,8 +674,8 @@ void VulkanRenderer::createGraphicsPipeline() {
     pipelineLayout_ = vk::PipelineLayout{};
   }
 
-  const auto vertCode = loadShaderBinary("triangle.vert.spv");
-  const auto fragCode = loadShaderBinary("triangle.frag.spv");
+  const auto vertCode = loadShaderBinary("mesh.vert.spv");
+  const auto fragCode = loadShaderBinary("mesh.frag.spv");
 
   if (vertCode.empty() || fragCode.empty()) {
     spdlog::error("Failed to load precompiled shader binaries; skipping pipeline creation");

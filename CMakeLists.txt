@@ -172,8 +172,8 @@ set(EDEN_SHADER_OUTPUT_DIR "${CMAKE_BINARY_DIR}/shaders")
 file(MAKE_DIRECTORY "${EDEN_SHADER_OUTPUT_DIR}")
 
 set(EDEN_SHADER_SOURCES
-    ${CMAKE_CURRENT_LIST_DIR}/shaders/triangle.vert
-    ${CMAKE_CURRENT_LIST_DIR}/shaders/triangle.frag
+    ${CMAKE_CURRENT_LIST_DIR}/shaders/mesh.vert
+    ${CMAKE_CURRENT_LIST_DIR}/shaders/mesh.frag
 )
 
 set(EDEN_SHADER_OUTPUTS "")

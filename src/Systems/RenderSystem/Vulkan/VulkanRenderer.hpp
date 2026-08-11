@@ -102,7 +102,7 @@ private:
   void createRenderPass();
   /// Creates descriptorSetLayout_: one combined-image-sampler binding,
   /// fragment stage, matching `layout(binding = 0) uniform sampler2D` in
-  /// triangle.frag.
+  /// mesh.frag.
   void createDescriptorSetLayout();
   /// Creates textureSampler_: linear filtering, repeat addressing --
   /// reasonable defaults for glTF textures, not currently configurable
@@ -115,8 +115,8 @@ private:
   /// defaultTexture_, so draws with no texture set still go through the
   /// texture-sampling path in the fragment shader.
   void createDefaultTexture();
-  /// (Re)builds the fixed triangle/quad pipeline from the precompiled
-  /// triangle.vert/frag SPIR-V under EDEN_SHADER_DIR. Destroys any
+  /// (Re)builds the mesh pipeline from the precompiled
+  /// mesh.vert/frag SPIR-V under EDEN_SHADER_DIR. Destroys any
   /// existing pipeline/layout first, so it's safe to call again on
   /// swapchain recreation. Leaves pipelineReady_ false (not an error) if
   /// the shader binaries can't be loaded.
