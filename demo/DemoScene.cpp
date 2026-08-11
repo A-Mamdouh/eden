@@ -23,7 +23,7 @@ Eden::Entity spawnBox(Eden::Scene &scene, Eden::MeshHandle cubeMesh, Eden::Mater
   return entity;
 }
 
-/// Free-fly camera: W/A/S/D to move, mouse to look, E/Q to rise/descend,
+/// Free-fly camera: W/A/S/D to move, mouse to look, Space/Ctrl to rise/descend,
 /// Escape to release the cursor. Camera and FreeFlyCamera live on the same
 /// entity -- the Camera component holds position/target/up, the script
 /// drives them from input each frame -- so there's exactly one entity for

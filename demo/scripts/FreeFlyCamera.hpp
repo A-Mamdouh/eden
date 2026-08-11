@@ -45,10 +45,10 @@ public:
     if (input.isKeyDown(Eden::Key::A)) {
       movement -= right;
     }
-    if (input.isKeyDown(Eden::Key::E)) {
+    if (input.isKeyDown(Eden::Key::Space)) {
       movement += worldUp;
     }
-    if (input.isKeyDown(Eden::Key::Q)) {
+    if (input.isKeyDown(Eden::Key::LeftControl)) {
       movement -= worldUp;
     }
 
