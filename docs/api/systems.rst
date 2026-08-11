@@ -41,13 +41,13 @@ Script components
 Vulkan backend
 --------------
 
-The only Renderer implementation today. Documented here for completeness;
-treat it as an implementation detail behind the Renderer contract above,
-not something calling code should depend on directly.
-
-.. doxygenclass:: Eden::VulkanRenderer
-   :members:
-   :private-members:
+The renderer implementation actually driving pixels: ``VulkanRenderer``
+under ``src/Systems/RenderSystem/Vulkan/``. It's intentionally outside
+this generated reference -- its header lives in ``src/``, not
+``include/``, specifically so no Vulkan type is reachable from the
+public API surface at all, and Doxygen only scans ``include/Eden``. See
+the source directly, or the "Backend header firewall" section of
+:doc:`../architecture` for why it's organized this way.
 
 NullRenderer
 ------------

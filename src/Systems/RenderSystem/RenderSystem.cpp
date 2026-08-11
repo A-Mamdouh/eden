@@ -3,7 +3,8 @@
 #include "Eden/Services/SceneService/Components.hpp"
 #include "Eden/Services/SceneService/Scene.hpp"
 #include "Eden/Services/SceneService/SceneService.hpp"
-#include "Eden/Systems/RenderSystem/Vulkan/VulkanRenderer.hpp"
+#include "Eden/Systems/RenderSystem/Renderer.hpp"
+#include "Systems/RenderSystem/Vulkan/VulkanRendererFactory.hpp"
 
 #include <SDL.h>
 #include <spdlog/spdlog.h>
@@ -42,8 +43,7 @@ void RenderSystem::onInit() {
     throw std::runtime_error(SDL_GetError());
   }
 
-  renderer_ = std::make_unique<VulkanRenderer>(VulkanRenderer::CreateInfo{
-      .window = window_, .enableValidationLayers = renderConfig_.enableValidationLayers});
+  renderer_ = createVulkanRenderer(window_, renderConfig_.enableValidationLayers);
 
   createPrimitiveMeshes();
 }

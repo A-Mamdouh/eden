@@ -1,4 +1,5 @@
-#include "Eden/Systems/RenderSystem/Vulkan/VulkanRenderer.hpp"
+#include "VulkanRenderer.hpp"
+#include "VulkanRendererFactory.hpp"
 
 #include <SDL.h>
 #include <SDL_vulkan.h>
@@ -1009,6 +1010,11 @@ void VulkanRenderer::renderFrame(const RenderFrame &frame) {
   if (presentResult != vk::Result::eSuccess) {
     throw std::runtime_error("Failed to present swapchain image");
   }
+}
+
+std::unique_ptr<Renderer> createVulkanRenderer(SDL_Window *window, bool enableValidationLayers) {
+  return std::make_unique<VulkanRenderer>(
+      VulkanRenderer::CreateInfo{.window = window, .enableValidationLayers = enableValidationLayers});
 }
 
 } // namespace Eden

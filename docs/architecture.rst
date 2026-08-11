@@ -122,14 +122,39 @@ quad) that ``Renderable::shape`` resolves against; there is no real
 asset-loading system yet.
 
 The Vulkan backend is implemented against this contract; see the
-Vulkan-specific header/source under ``Systems/RenderSystem/Vulkan/`` for
-current status rather than trusting this page to stay in sync on backend
-internals. :cpp:class:`Eden::NullRenderer` is a second, headless
+Vulkan-specific header/source under ``src/Systems/RenderSystem/Vulkan/``
+for current status rather than trusting this page to stay in sync on
+backend internals. :cpp:class:`Eden::NullRenderer` is a second, headless
 implementation -- no window, no GPU, no graphics API calls -- that
 exists to prove the contract is genuinely backend-agnostic and to give
 the test suite (below) something to construct a ``Renderer`` against
 without a GPU. It isn't wired into ``RenderSystem``; only tests use it
 directly.
+
+Backend header firewall
+------------------------
+
+No Vulkan (or, eventually, Metal/D3D12/GL) type is reachable from
+``include/``. ``VulkanRenderer.hpp`` lives under ``src/``, not
+``include/`` -- a plain file-move, since CMake already treats ``src/``
+as a private include path (``PRIVATE`` in ``target_include_directories``)
+that only the ``Eden`` library's own ``.cpp`` files can see. That alone
+keeps Vulkan out of anything a consumer includes.
+
+It also solves a sharper problem than public-API leakage: two real
+graphics SDKs' headers landing in the *same translation unit* inside the
+engine itself, which is exactly how backends "clash" (macro/type
+collisions, especially on Windows where both often drag in
+``windows.h``). ``RenderSystem.cpp`` used to construct ``VulkanRenderer``
+directly, which meant it had to see the complete ``vk::``-typed class
+just to know its size. Now it calls
+``createVulkanRenderer(SDL_Window*, bool)`` -- declared in
+``VulkanRendererFactory.hpp``, a header with zero Vulkan types in its
+signature -- and only ``VulkanRenderer.cpp`` itself ever includes the
+real header. A future second backend gets the same shape: its own
+private header plus a tiny factory declaration, so no single file is
+ever positioned to include two backends' real SDK headers at once, no
+matter how many backends exist.
 
 Testing
 -------
