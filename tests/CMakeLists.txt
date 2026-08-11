@@ -7,6 +7,7 @@ add_executable(EdenTests
     InputSystemTest.cpp
     NullRendererTest.cpp
     RenderSystemMaterialTest.cpp
+    BoundsTest.cpp
 )
 
 target_link_libraries(

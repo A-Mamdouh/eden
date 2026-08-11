@@ -13,6 +13,7 @@ add_library(Eden STATIC
     Systems/RenderSystem/RenderSystem.cpp
     Systems/RenderSystem/NullRenderer.cpp
     Systems/RenderSystem/GltfLoader.cpp
+    Systems/RenderSystem/Bounds.cpp
     Systems/RenderSystem/Vulkan/VulkanRenderer.cpp
 )
 

@@ -50,7 +50,17 @@ void RenderSystem::onInit() {
   renderer_ = createVulkanRenderer(window_, renderConfig_.enableValidationLayers);
 }
 
-MeshHandle RenderSystem::createMesh(const MeshDesc &desc) { return renderer_->createMesh(desc); }
+MeshHandle RenderSystem::createMesh(const MeshDesc &desc) {
+  const MeshHandle handle = renderer_->createMesh(desc);
+  if (handle.valid()) {
+    const std::uint32_t index = handle.id - 1;
+    if (index >= meshBounds_.size()) {
+      meshBounds_.resize(index + 1);
+    }
+    meshBounds_[index] = MeshBoundsSlot{computeBounds(desc.vertices), handle.generation};
+  }
+  return handle;
+}
 
 void RenderSystem::destroyMesh(MeshHandle handle) { renderer_->destroyMesh(handle); }
 
@@ -125,6 +135,21 @@ const Material *RenderSystem::resolveMaterial(MaterialHandle handle) const {
   return &slot.material;
 }
 
+const AABB *RenderSystem::resolveMeshBounds(MeshHandle mesh) const {
+  if (!mesh.valid()) {
+    return nullptr;
+  }
+  const std::uint32_t index = mesh.id - 1;
+  if (index >= meshBounds_.size()) {
+    return nullptr;
+  }
+  const MeshBoundsSlot &slot = meshBounds_[index];
+  if (slot.generation != mesh.generation) {
+    return nullptr;
+  }
+  return &slot.bounds;
+}
+
 DrawCommand RenderSystem::buildDrawCommand(MeshHandle mesh, MaterialHandle material,
                                            const Mat4 &transform,
                                            const TintOverride *tintOverride) const {
@@ -188,8 +213,8 @@ RenderFrame RenderSystem::buildFrameFromScene() const {
     const auto &worldTransform = registry.get<WorldTransform>(entity);
     const auto *tintOverride = registry.try_get<TintOverride>(entity);
     for (const ModelPart &part : model.parts) {
-      frame.commands.push_back(buildDrawCommand(part.mesh, part.material,
-                                                 worldTransform.matrix * part.localTransform, tintOverride));
+      const Mat4 partTransform = worldTransform.matrix * part.localTransform;
+      frame.commands.push_back(buildDrawCommand(part.mesh, part.material, partTransform, tintOverride));
     }
   }
 

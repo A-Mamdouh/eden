@@ -3,6 +3,7 @@
 #include "Eden/Systems/ISystem.hpp"
 #include "Eden/Services/ConfigService/Config.hpp"
 #include "Eden/Services/SceneService/Entity.hpp"
+#include "Eden/Systems/RenderSystem/Bounds.hpp"
 #include "Eden/Systems/RenderSystem/Material.hpp"
 #include "Eden/Systems/RenderSystem/Model.hpp"
 #include "Eden/Systems/RenderSystem/RenderableComponent.hpp"
@@ -109,6 +110,11 @@ class RenderSystem : public ISystem {
   /// buildFrameFromScene().
   DrawCommand buildDrawCommand(MeshHandle mesh, MaterialHandle material, const Mat4 &transform,
                                const TintOverride *tintOverride) const;
+  /// @return `mesh`'s cached object-space AABB (computed once in
+  ///         createMesh()), or nullptr if the handle is invalid, out of
+  ///         range, or from a reused (stale) slot -- buildFrameFromScene()
+  ///         treats "no bounds" as "don't cull", never as "cull".
+  const AABB *resolveMeshBounds(MeshHandle mesh) const;
 
   Config::WindowConfig windowConfig_;
   Config::RenderConfig renderConfig_;
@@ -138,6 +144,18 @@ class RenderSystem : public ISystem {
   };
   std::vector<MaterialSlot> materials_{};
   std::vector<std::uint32_t> freeMaterialSlots_{};
+
+  /// Object-space AABB per mesh slot, indexed the same way as
+  /// VulkanRenderer's own mesh slots (handle.id - 1) since createMesh()
+  /// computes this right after the backend hands back the handle. No
+  /// separate free-list: a destroyed slot's bounds are simply overwritten
+  /// the next time that slot's id is reused, and generation guards any
+  /// lookup against a stale handle in between.
+  struct MeshBoundsSlot {
+    AABB bounds{};
+    std::uint32_t generation{0};
+  };
+  std::vector<MeshBoundsSlot> meshBounds_{};
 };
 
 } // namespace Eden
