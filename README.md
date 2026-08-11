@@ -78,10 +78,7 @@ docs/           Doxygen + Sphinx documentation source
 This is an active portfolio project, not a finished product. Documented
 honestly rather than glossed over:
 
-- No camera component yet — rendering uses an identity view/projection.
-- No input system yet, so scripts can't react to keyboard/mouse.
-- No real asset loading — `RenderSystem` draws from a tiny built-in
-  primitive mesh library (a triangle and a quad).
+- Only simple asset loading is supported.
 - Vulkan is the only renderer backend actually driving pixels;
   `NullRenderer` exists for tests, not for rendering.
 
