@@ -33,16 +33,16 @@ void Engine::init() {
   sceneService_->init(eventService_);
 
   // Input runs first so scripts see this frame's fresh keyboard/mouse
-  // state, not last frame's.
+  // state, not last frame's -- ScriptSystem picks it up via
+  // Events::InputStateUpdatedEvent, not a direct reference.
   auto inputSystem = std::make_unique<InputSystem>();
   inputSystem->init(eventService_);
-  InputSystem &inputSystemRef = *inputSystem;
   systems_.push_back(std::move(inputSystem));
 
   // Scripts run next so any component writes they make (Transform,
   // Renderable, ...) are visible to TransformSystem/RenderSystem the
   // same frame, not one frame late.
-  auto scriptSystem = std::make_unique<ScriptSystem>(*sceneService_, inputSystemRef);
+  auto scriptSystem = std::make_unique<ScriptSystem>(*sceneService_);
   scriptSystem->init(eventService_);
   systems_.push_back(std::move(scriptSystem));
 

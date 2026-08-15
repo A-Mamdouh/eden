@@ -12,9 +12,9 @@
 /// plus a forward vector derived from yaw/pitch.
 class FreeFlyCamera : public Eden::ScriptBehaviour {
 public:
-  void onStart(Eden::Entity, Eden::InputSystem &input) override { input.setMouseCaptured(true); }
+  void onStart(Eden::Entity, Eden::InputState &input) override { input.setMouseCaptured(true); }
 
-  void onUpdate(Eden::Entity entity, double dt, Eden::InputSystem &input) override {
+  void onUpdate(Eden::Entity entity, double dt, Eden::InputState &input) override {
     if (input.isKeyPressed(Eden::Key::Escape)) {
       input.setMouseCaptured(!input.mouseCaptured());
     }

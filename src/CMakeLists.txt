@@ -9,6 +9,7 @@ add_library(Eden STATIC
     Systems/ISystem.cpp
     Systems/TransformSystem.cpp
     Systems/InputSystem/InputSystem.cpp
+    Systems/InputSystem/InputState.cpp
     Systems/ScriptSystem/ScriptSystem.cpp
     Systems/RenderSystem/RenderSystem.cpp
     Systems/RenderSystem/NullRenderer.cpp
