@@ -9,9 +9,14 @@
 int main()
 {
     Eden::AppConfig config;
-    config.engine.window.title = "Eden Demo";
+    config.engine.render.window.title = "Eden Demo";
     config.engine.render.enableValidationLayers = true;
-    config.engine.render.targetFrameRate = 144;
+    config.engine.render.display.targetFrameRate = 60;
+    config.engine.render.display.vsync = Eden::VsyncMode::On;
+    config.engine.render.display.height = 1080;
+    config.engine.render.display.width = 1920;
+    config.engine.render.display.screenMode = Eden::Config::ScreenMode::Windowed;
+    config.engine.render.graphics.antiAliasing = Eden::AntiAliasing::MSAA4x;
 
     Eden::Engine engine(config);
     const Demo::DemoMeshes meshes = Demo::createDemoMeshes(engine);

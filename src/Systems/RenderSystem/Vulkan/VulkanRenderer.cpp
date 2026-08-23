@@ -135,14 +135,62 @@ vk::SurfaceFormatKHR chooseSurfaceFormat(
   return formats.front();
 }
 
-vk::PresentModeKHR choosePresentMode(
-    const std::vector<vk::PresentModeKHR> &modes) {
-  for (const auto mode : modes) {
-    if (mode == vk::PresentModeKHR::eMailbox) {
-      return mode;
-    }
+bool supportsPresentMode(const std::vector<vk::PresentModeKHR> &modes, vk::PresentModeKHR mode) {
+  return std::find(modes.begin(), modes.end(), mode) != modes.end();
+}
+
+/// eFifo is guaranteed by the Vulkan spec to always be supported, so it's
+/// the safe fallback whenever a preferred mode isn't available -- On maps
+/// straight to it, Off/Adaptive fall back to it rather than failing.
+vk::PresentModeKHR choosePresentMode(const std::vector<vk::PresentModeKHR> &modes,
+                                     VsyncMode vsync) {
+  switch (vsync) {
+  case VsyncMode::Off:
+    return supportsPresentMode(modes, vk::PresentModeKHR::eImmediate)
+               ? vk::PresentModeKHR::eImmediate
+               : vk::PresentModeKHR::eFifo;
+  case VsyncMode::Adaptive:
+    return supportsPresentMode(modes, vk::PresentModeKHR::eFifoRelaxed)
+               ? vk::PresentModeKHR::eFifoRelaxed
+               : vk::PresentModeKHR::eFifo;
+  case VsyncMode::On:
+  default:
+    return vk::PresentModeKHR::eFifo;
   }
-  return vk::PresentModeKHR::eFifo;
+}
+
+vk::SampleCountFlagBits toVkSampleCount(AntiAliasing aa) {
+  switch (aa) {
+  case AntiAliasing::MSAA2x:
+    return vk::SampleCountFlagBits::e2;
+  case AntiAliasing::MSAA4x:
+    return vk::SampleCountFlagBits::e4;
+  case AntiAliasing::MSAA8x:
+    return vk::SampleCountFlagBits::e8;
+  case AntiAliasing::None:
+  default:
+    return vk::SampleCountFlagBits::e1;
+  }
+}
+
+AntiAliasing toAntiAliasing(vk::SampleCountFlagBits samples) {
+  switch (samples) {
+  case vk::SampleCountFlagBits::e8:
+    return AntiAliasing::MSAA8x;
+  case vk::SampleCountFlagBits::e4:
+    return AntiAliasing::MSAA4x;
+  case vk::SampleCountFlagBits::e2:
+    return AntiAliasing::MSAA2x;
+  default:
+    return AntiAliasing::None;
+  }
+}
+
+/// Compares as plain integers rather than relying on operator<= existing
+/// for a Vulkan flag-bits enum (it generally doesn't).
+vk::SampleCountFlagBits clampSampleCount(vk::SampleCountFlagBits requested,
+                                        vk::SampleCountFlagBits max) {
+  return static_cast<std::uint32_t>(requested) <= static_cast<std::uint32_t>(max) ? requested : max;
 }
 
 vk::Extent2D chooseExtent(const vk::SurfaceCapabilitiesKHR &capabilities,
@@ -172,7 +220,8 @@ vk::Extent2D chooseExtent(const vk::SurfaceCapabilitiesKHR &capabilities,
 
 VulkanRenderer::VulkanRenderer(const CreateInfo &createInfo)
     : window_{createInfo.window},
-      enableValidationLayers_{createInfo.enableValidationLayers} {
+      enableValidationLayers_{createInfo.enableValidationLayers},
+      currentSettings_{createInfo.initialSettings} {
   if (!window_) {
     throw std::runtime_error("VulkanRenderer requires a valid SDL_Window");
   }
@@ -255,6 +304,23 @@ void VulkanRenderer::requestResize(std::uint32_t /*width*/, std::uint32_t /*heig
   framebufferResized_ = true;
 }
 
+ApplyResult VulkanRenderer::applySettings(const RenderSettings &settings) {
+  currentSettings_ = settings;
+  // Anti-aliasing changes the render pass/pipeline's attachment layout and
+  // vsync changes the swapchain's present mode -- both are already exactly
+  // what recreateSwapchain() rebuilds, without touching instance_/device_.
+  recreateSwapchain();
+  return ApplyResult::Applied;
+}
+
+RendererCapabilities VulkanRenderer::queryCapabilities() const {
+  return RendererCapabilities{toAntiAliasing(maxSampleCount_)};
+}
+
+vk::SampleCountFlagBits VulkanRenderer::sampleCount() const {
+  return clampSampleCount(toVkSampleCount(currentSettings_.antiAliasing), maxSampleCount_);
+}
+
 void VulkanRenderer::initVulkan() {
   createInstance();
   createSurface();
@@ -264,6 +330,7 @@ void VulkanRenderer::initVulkan() {
   createSwapchain();
   createImageViews();
   createDepthResources();
+  createColorResources();
   createRenderPass();
   createDescriptorSetLayout();
   createTextureSampler();
@@ -349,6 +416,23 @@ void VulkanRenderer::pickPhysicalDevice() {
   if (!physicalDevice_) {
     throw std::runtime_error("Failed to find a suitable GPU");
   }
+
+  // Highest count both color and depth attachments can agree on; capped by
+  // the candidates list at e8 since AntiAliasing itself has no higher
+  // level to request. Hardware reporting less than e2 for either just
+  // means maxSampleCount_ stays e1 -- anti-aliasing genuinely isn't
+  // available, not a policy choice.
+  const auto limits = physicalDevice_.getProperties().limits;
+  const vk::SampleCountFlags supported =
+      limits.framebufferColorSampleCounts & limits.framebufferDepthSampleCounts;
+  maxSampleCount_ = vk::SampleCountFlagBits::e1;
+  for (const auto candidate : {vk::SampleCountFlagBits::e8, vk::SampleCountFlagBits::e4,
+                               vk::SampleCountFlagBits::e2}) {
+    if (supported & candidate) {
+      maxSampleCount_ = candidate;
+      break;
+    }
+  }
 }
 
 void VulkanRenderer::createLogicalDevice() {
@@ -393,7 +477,7 @@ void VulkanRenderer::createSwapchain() {
   const auto details = querySwapchainSupport(physicalDevice_, surface_);
 
   const auto surfaceFormat = chooseSurfaceFormat(details.formats);
-  const auto presentMode = choosePresentMode(details.presentModes);
+  const auto presentMode = choosePresentMode(details.presentModes, currentSettings_.vsync);
   const auto extent = chooseExtent(details.capabilities, window_);
 
   std::uint32_t imageCount = details.capabilities.minImageCount + 1;
@@ -488,7 +572,7 @@ void VulkanRenderer::createDepthResources() {
   imageInfo.tiling = vk::ImageTiling::eOptimal;
   imageInfo.initialLayout = vk::ImageLayout::eUndefined;
   imageInfo.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
-  imageInfo.samples = vk::SampleCountFlagBits::e1;
+  imageInfo.samples = sampleCount();
   imageInfo.sharingMode = vk::SharingMode::eExclusive;
 
   depthImage_ = device_.createImage(imageInfo);
@@ -515,26 +599,87 @@ void VulkanRenderer::createDepthResources() {
   depthImageView_ = device_.createImageView(viewInfo);
 }
 
+void VulkanRenderer::createColorResources() {
+  if (sampleCount() == vk::SampleCountFlagBits::e1) {
+    return;
+  }
+
+  vk::ImageCreateInfo imageInfo{};
+  imageInfo.imageType = vk::ImageType::e2D;
+  imageInfo.extent = vk::Extent3D{swapchainExtent_.width, swapchainExtent_.height, 1};
+  imageInfo.mipLevels = 1;
+  imageInfo.arrayLayers = 1;
+  imageInfo.format = swapchainImageFormat_;
+  imageInfo.tiling = vk::ImageTiling::eOptimal;
+  imageInfo.initialLayout = vk::ImageLayout::eUndefined;
+  imageInfo.usage = vk::ImageUsageFlagBits::eColorAttachment;
+  imageInfo.samples = sampleCount();
+  imageInfo.sharingMode = vk::SharingMode::eExclusive;
+
+  colorImage_ = device_.createImage(imageInfo);
+
+  const vk::MemoryRequirements memRequirements = device_.getImageMemoryRequirements(colorImage_);
+  vk::MemoryAllocateInfo allocInfo{};
+  allocInfo.allocationSize = memRequirements.size;
+  allocInfo.memoryTypeIndex =
+      findMemoryType(memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+  colorImageMemory_ = device_.allocateMemory(allocInfo);
+  device_.bindImageMemory(colorImage_, colorImageMemory_, 0);
+
+  vk::ImageViewCreateInfo viewInfo{};
+  viewInfo.image = colorImage_;
+  viewInfo.viewType = vk::ImageViewType::e2D;
+  viewInfo.format = swapchainImageFormat_;
+  viewInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+  viewInfo.subresourceRange.baseMipLevel = 0;
+  viewInfo.subresourceRange.levelCount = 1;
+  viewInfo.subresourceRange.baseArrayLayer = 0;
+  viewInfo.subresourceRange.layerCount = 1;
+
+  colorImageView_ = device_.createImageView(viewInfo);
+}
+
 void VulkanRenderer::createRenderPass() {
+  const vk::SampleCountFlagBits samples = sampleCount();
+  const bool multisampled = samples != vk::SampleCountFlagBits::e1;
+
   vk::AttachmentDescription colorAttachment{};
   colorAttachment.format = swapchainImageFormat_;
-  colorAttachment.samples = vk::SampleCountFlagBits::e1;
+  colorAttachment.samples = samples;
   colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-  colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+  // Multisampled: the resolve attachment below is what actually gets
+  // presented, so this attachment's own contents don't need to survive
+  // past the subpass.
+  colorAttachment.storeOp =
+      multisampled ? vk::AttachmentStoreOp::eDontCare : vk::AttachmentStoreOp::eStore;
   colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
   colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
   colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
-  colorAttachment.finalLayout = vk::ImageLayout::ePresentSrcKHR;
+  colorAttachment.finalLayout =
+      multisampled ? vk::ImageLayout::eColorAttachmentOptimal : vk::ImageLayout::ePresentSrcKHR;
 
   vk::AttachmentDescription depthAttachment{};
   depthAttachment.format = depthFormat_;
-  depthAttachment.samples = vk::SampleCountFlagBits::e1;
+  depthAttachment.samples = samples;
   depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
   depthAttachment.storeOp = vk::AttachmentStoreOp::eDontCare;
   depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
   depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
   depthAttachment.initialLayout = vk::ImageLayout::eUndefined;
   depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+
+  // Only used/attached when multisampled; single-sample rendering writes
+  // straight to the swapchain image via colorAttachment above instead.
+  vk::AttachmentDescription resolveAttachment{};
+  resolveAttachment.format = swapchainImageFormat_;
+  resolveAttachment.samples = vk::SampleCountFlagBits::e1;
+  resolveAttachment.loadOp = vk::AttachmentLoadOp::eDontCare;
+  resolveAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+  resolveAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+  resolveAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+  resolveAttachment.initialLayout = vk::ImageLayout::eUndefined;
+  resolveAttachment.finalLayout = vk::ImageLayout::ePresentSrcKHR;
 
   vk::AttachmentReference colorAttachmentRef{};
   colorAttachmentRef.attachment = 0;
@@ -544,11 +689,18 @@ void VulkanRenderer::createRenderPass() {
   depthAttachmentRef.attachment = 1;
   depthAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 
+  vk::AttachmentReference resolveAttachmentRef{};
+  resolveAttachmentRef.attachment = 2;
+  resolveAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
+
   vk::SubpassDescription subpass{};
   subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
   subpass.colorAttachmentCount = 1;
   subpass.pColorAttachments = &colorAttachmentRef;
   subpass.pDepthStencilAttachment = &depthAttachmentRef;
+  if (multisampled) {
+    subpass.pResolveAttachments = &resolveAttachmentRef;
+  }
 
   vk::SubpassDependency dependency{};
   dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -561,7 +713,10 @@ void VulkanRenderer::createRenderPass() {
   dependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite |
                              vk::AccessFlagBits::eDepthStencilAttachmentWrite;
 
-  const std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
+  std::vector<vk::AttachmentDescription> attachments = {colorAttachment, depthAttachment};
+  if (multisampled) {
+    attachments.push_back(resolveAttachment);
+  }
 
   vk::RenderPassCreateInfo renderPassInfo{};
   renderPassInfo.attachmentCount = static_cast<std::uint32_t>(attachments.size());
@@ -743,7 +898,7 @@ void VulkanRenderer::createGraphicsPipeline() {
   rasterizer.lineWidth = 1.0f;
 
   vk::PipelineMultisampleStateCreateInfo multisampling{};
-  multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+  multisampling.rasterizationSamples = sampleCount();
   multisampling.sampleShadingEnable = VK_FALSE;
 
   vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
@@ -811,11 +966,17 @@ void VulkanRenderer::createGraphicsPipeline() {
 }
 
 void VulkanRenderer::createFramebuffers() {
+  const bool multisampled = sampleCount() != vk::SampleCountFlagBits::e1;
+
   swapchainFramebuffers_.clear();
   swapchainFramebuffers_.reserve(swapchainImageViews_.size());
 
   for (const auto view : swapchainImageViews_) {
-    const std::array<vk::ImageView, 2> attachments = {view, depthImageView_};
+    // Attachment order must match createRenderPass()'s attachment indices:
+    // color=0, depth=1, resolve=2 when multisampled.
+    const std::vector<vk::ImageView> attachments =
+        multisampled ? std::vector<vk::ImageView>{colorImageView_, depthImageView_, view}
+                     : std::vector<vk::ImageView>{view, depthImageView_};
 
     vk::FramebufferCreateInfo framebufferInfo{};
     framebufferInfo.renderPass = renderPass_;
@@ -1246,6 +1407,19 @@ void VulkanRenderer::cleanupSwapchain() {
     depthImageMemory_ = nullptr;
   }
 
+  if (colorImageView_) {
+    device_.destroyImageView(colorImageView_);
+    colorImageView_ = nullptr;
+  }
+  if (colorImage_) {
+    device_.destroyImage(colorImage_);
+    colorImage_ = nullptr;
+  }
+  if (colorImageMemory_) {
+    device_.freeMemory(colorImageMemory_);
+    colorImageMemory_ = nullptr;
+  }
+
   for (const auto view : swapchainImageViews_) {
     device_.destroyImageView(view);
   }
@@ -1273,6 +1447,7 @@ void VulkanRenderer::recreateSwapchain() {
   createSwapchain();
   createImageViews();
   createDepthResources();
+  createColorResources();
   createRenderPass();
   createGraphicsPipeline();
   createFramebuffers();
@@ -1430,9 +1605,10 @@ void VulkanRenderer::renderFrame(const RenderFrame &frame) {
   }
 }
 
-std::unique_ptr<Renderer> createVulkanRenderer(SDL_Window *window, bool enableValidationLayers) {
-  return std::make_unique<VulkanRenderer>(
-      VulkanRenderer::CreateInfo{.window = window, .enableValidationLayers = enableValidationLayers});
+std::unique_ptr<Renderer> createVulkanRenderer(SDL_Window *window, bool enableValidationLayers,
+                                               const RenderSettings &initialSettings) {
+  return std::make_unique<VulkanRenderer>(VulkanRenderer::CreateInfo{
+      .window = window, .enableValidationLayers = enableValidationLayers, .initialSettings = initialSettings});
 }
 
 } // namespace Eden

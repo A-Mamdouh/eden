@@ -46,6 +46,18 @@ public:
   /// @param scene New active scene; the previous one, if any, is destroyed.
   void loadScene(std::unique_ptr<Scene> scene);
 
+  /// @return The current live configuration; reflects any prior
+  ///         updateConfig() call, not just what was passed to the
+  ///         constructor.
+  const Config::ApplicationConfig &config() const;
+  /// Forwards to ConfigService::update(). Every Service/System that reacts
+  /// to config (currently just RenderSystem) picks up the change via
+  /// Events::ConfigUpdatedEvent -- no restart required. The embedding
+  /// application never touches ConfigService directly.
+  /// @param newConfig Configuration to become the new live value; read
+  ///        config() first if you only want to change one field.
+  void updateConfig(const Config::ApplicationConfig &newConfig);
+
   /// Loads a glTF/GLB file's meshes, textures, and materials, uploading
   /// them through RenderSystem and returning the result as a Model --
   /// attach it to an entity like any other component (paired with a

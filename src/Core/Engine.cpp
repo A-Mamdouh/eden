@@ -50,8 +50,7 @@ void Engine::init() {
   transformSystem->init(eventService_);
   systems_.push_back(std::move(transformSystem));
 
-  auto renderSystem = std::make_unique<RenderSystem>(config_.engine.window,
-                                                     config_.engine.render, *sceneService_);
+  auto renderSystem = std::make_unique<RenderSystem>(config_.engine.render, *sceneService_);
   renderSystem_ = renderSystem.get();
   renderSystem_->init(eventService_);
   systems_.push_back(std::move(renderSystem));
@@ -81,6 +80,12 @@ void Engine::stop() { running_ = false; }
 
 void Engine::loadScene(std::unique_ptr<Scene> scene) {
   sceneService_->loadScene(std::move(scene));
+}
+
+const Config::ApplicationConfig &Engine::config() const { return configService_->get(); }
+
+void Engine::updateConfig(const Config::ApplicationConfig &newConfig) {
+  configService_->update(newConfig);
 }
 
 Model Engine::loadModel(const std::string &path) { return renderSystem_->loadModel(path); }

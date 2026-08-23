@@ -2,6 +2,7 @@
 
 #include "Eden/Systems/ISystem.hpp"
 #include "Eden/Services/ConfigService/Config.hpp"
+#include "Eden/Services/EventService/EventService.hpp"
 #include "Eden/Services/SceneService/Entity.hpp"
 #include "Eden/Systems/RenderSystem/Bounds.hpp"
 #include "Eden/Systems/RenderSystem/Material.hpp"
@@ -9,6 +10,7 @@
 #include "Eden/Systems/RenderSystem/RenderableComponent.hpp"
 #include "Eden/Systems/RenderSystem/RendererTypes.hpp"
 
+#include <optional>
 #include <vector>
 
 struct SDL_Window;
@@ -19,20 +21,26 @@ class Renderer;
 class Scene;
 class SceneService;
 
+namespace Events {
+struct ConfigUpdatedEvent;
+}
+
 /// Owns the SDL window and the active Renderer backend; polls window/OS
 /// events and drives one Renderer::renderFrame() per update(), built from
 /// the active Scene's Renderable/Model entities (each paired with a
-/// WorldTransform).
+/// WorldTransform). Subscribes to Events::ConfigUpdatedEvent so a later
+/// ConfigService::update() call can change anything in RenderConfig --
+/// window chrome, screen mode/resolution, backend, or graphics settings --
+/// without restarting the engine; see onConfigUpdated().
 class RenderSystem : public ISystem {
 
   public:
-  /// @param windowConfig SDL window creation parameters.
-  /// @param renderConfig Rendering backend parameters (validation layers,
-  ///        frame rate target).
+  /// @param renderConfig Everything RenderSystem needs to create its
+  ///        window and Renderer: backend choice, validation layers,
+  ///        window chrome, display settings, graphics settings.
   /// @param sceneService Queried each update() for the active scene to
   ///        draw; a null active scene renders just the clear color.
-  RenderSystem(Config::WindowConfig windowConfig, Config::RenderConfig renderConfig,
-              SceneService &sceneService);
+  RenderSystem(Config::RenderConfig renderConfig, SceneService &sceneService);
   ~RenderSystem() override;
 
   std::string getName() override { return "Render System"; }
@@ -85,8 +93,24 @@ class RenderSystem : public ISystem {
   Entity activeCamera() const;
 
   private:
-  /// Creates the SDL window and the Vulkan renderer.
+  /// Creates the SDL window, constructs the configured Renderer backend,
+  /// and subscribes to Events::ConfigUpdatedEvent.
   void onInit() override;
+
+  /// Creates window_ from renderConfig_.window/display.
+  void createWindow();
+  /// Destroys the current renderer_ (if any) and constructs the one
+  /// renderConfig_.backend currently selects. Used both by onInit() and
+  /// by onConfigUpdated() whenever a change can't be applied in place.
+  void createRenderer();
+  /// Reacts to a ConfigService::update() call: applies window-chrome and
+  /// display changes directly via SDL, routes anti-aliasing/vsync through
+  /// renderer_->applySettings(), and falls back to createRenderer() for
+  /// anything that needs it (backend switch, validation layers, or a
+  /// backend reporting ApplyResult::RequiresRecreate).
+  /// @param event Carries the config engine-wide; only its .render slice
+  ///        is read.
+  void onConfigUpdated(const Events::ConfigUpdatedEvent &event);
 
   /// Walks the active scene's Renderable+WorldTransform and
   /// Model+WorldTransform entities into a RenderFrame. @return A frame
@@ -116,13 +140,15 @@ class RenderSystem : public ISystem {
   ///         treats "no bounds" as "don't cull", never as "cull".
   const AABB *resolveMeshBounds(MeshHandle mesh) const;
 
-  Config::WindowConfig windowConfig_;
   Config::RenderConfig renderConfig_;
   SceneService &sceneService_;
 
   SDL_Window *window_{nullptr};
   std::unique_ptr<Renderer> renderer_{nullptr};
   bool quitRequested_{false};
+
+  /// Set in onInit(), unsubscribed in shutdown().
+  std::optional<ListenerId> configListener_{};
 
   /// Updated on window creation and every resize event; drives the
   /// active Camera's aspect ratio.

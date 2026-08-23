@@ -10,8 +10,7 @@
 
 TEST(RenderSystemMaterialTest, CreateMaterialReturnsValidHandle) {
   Eden::SceneService sceneService;
-  Eden::RenderSystem renderSystem{Eden::Config::WindowConfig{}, Eden::Config::RenderConfig{},
-                                  sceneService};
+  Eden::RenderSystem renderSystem{Eden::Config::RenderConfig{}, sceneService};
 
   const auto handle = renderSystem.createMaterial(Eden::Material{});
 
@@ -20,8 +19,7 @@ TEST(RenderSystemMaterialTest, CreateMaterialReturnsValidHandle) {
 
 TEST(RenderSystemMaterialTest, DestroyMaterialThenDestroyAgainIsSafe) {
   Eden::SceneService sceneService;
-  Eden::RenderSystem renderSystem{Eden::Config::WindowConfig{}, Eden::Config::RenderConfig{},
-                                  sceneService};
+  Eden::RenderSystem renderSystem{Eden::Config::RenderConfig{}, sceneService};
   const auto handle = renderSystem.createMaterial(Eden::Material{});
 
   renderSystem.destroyMaterial(handle);
@@ -31,16 +29,14 @@ TEST(RenderSystemMaterialTest, DestroyMaterialThenDestroyAgainIsSafe) {
 
 TEST(RenderSystemMaterialTest, DestroyingAnInvalidHandleIsSafe) {
   Eden::SceneService sceneService;
-  Eden::RenderSystem renderSystem{Eden::Config::WindowConfig{}, Eden::Config::RenderConfig{},
-                                  sceneService};
+  Eden::RenderSystem renderSystem{Eden::Config::RenderConfig{}, sceneService};
 
   EXPECT_NO_THROW(renderSystem.destroyMaterial(Eden::MaterialHandle{}));
 }
 
 TEST(RenderSystemMaterialTest, HandleGenerationChangesWhenSlotIsReused) {
   Eden::SceneService sceneService;
-  Eden::RenderSystem renderSystem{Eden::Config::WindowConfig{}, Eden::Config::RenderConfig{},
-                                  sceneService};
+  Eden::RenderSystem renderSystem{Eden::Config::RenderConfig{}, sceneService};
 
   const auto first = renderSystem.createMaterial(Eden::Material{});
   renderSystem.destroyMaterial(first);

@@ -90,4 +90,16 @@ void NullRenderer::requestResize(std::uint32_t width, std::uint32_t height) {
   lastResizeHeight_ = height;
 }
 
+ApplyResult NullRenderer::applySettings(const RenderSettings &settings) {
+  settings_ = settings;
+  return ApplyResult::Applied;
+}
+
+RendererCapabilities NullRenderer::queryCapabilities() const {
+  // No real hardware limit to report; claims the highest level so callers
+  // exercising the full settings range against this backend aren't
+  // artificially clamped.
+  return RendererCapabilities{AntiAliasing::MSAA8x};
+}
+
 } // namespace Eden

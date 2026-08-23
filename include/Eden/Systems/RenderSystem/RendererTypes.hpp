@@ -123,4 +123,39 @@ struct RenderFrame {
   std::vector<DrawCommand> commands{};
 };
 
+/// Multisample anti-aliasing level. A backend clamps a request it can't
+/// satisfy to whatever RendererCapabilities::maxAntiAliasing reports.
+enum class AntiAliasing { None, MSAA2x, MSAA4x, MSAA8x };
+
+/// Present-mode preference. Adaptive falls back to On on hardware without
+/// relaxed present support; a backend never fails a vsync request outright.
+enum class VsyncMode { Off, On, Adaptive };
+
+/// The subset of graphics settings a Renderer itself acts on -- everything
+/// else a settings menu exposes (screen mode, resolution, window chrome)
+/// is handled by whoever owns the window, never by Renderer.
+struct RenderSettings {
+  /// Anti-aliasing level to render with.
+  AntiAliasing antiAliasing{AntiAliasing::MSAA2x};
+  /// Present-mode preference.
+  VsyncMode vsync{VsyncMode::On};
+};
+
+/// What a Renderer backend can actually do on the current hardware; a
+/// settings menu should read this to know which choices are meaningful
+/// before offering them, rather than discovering a clamp after the fact.
+struct RendererCapabilities {
+  /// Highest anti-aliasing level this backend's device actually supports.
+  AntiAliasing maxAntiAliasing{AntiAliasing::None};
+};
+
+/// Result of Renderer::applySettings().
+enum class ApplyResult {
+  /// The backend updated itself in place; no caller action needed.
+  Applied,
+  /// The backend can't satisfy this request without being destroyed and
+  /// reconstructed; the caller (RenderSystem) is responsible for that.
+  RequiresRecreate,
+};
+
 } // namespace Eden

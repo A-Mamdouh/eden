@@ -26,6 +26,10 @@ public:
     /// Requests the VK_LAYER_KHRONOS_validation layer; silently disabled
     /// with a warning if it isn't installed.
     bool enableValidationLayers{false};
+    /// Anti-aliasing/vsync to build the pipeline and swapchain with;
+    /// clamped against the picked device's actual limits, same as any
+    /// later applySettings() call.
+    RenderSettings initialSettings{};
   };
 
   /// Performs the full Vulkan setup sequence (instance through sync
@@ -42,6 +46,8 @@ public:
 
   void renderFrame(const RenderFrame &frame) override;
   void requestResize(std::uint32_t width, std::uint32_t height) override;
+  ApplyResult applySettings(const RenderSettings &settings) override;
+  RendererCapabilities queryCapabilities() const override;
 
 private:
   /// GPU-side storage for one createMesh() call. `alive` and
@@ -98,7 +104,13 @@ private:
   /// swapchainExtent_. Device-local (not host-visible): never written
   /// from the CPU, only cleared/tested by the GPU each frame.
   void createDepthResources();
-  /// Creates renderPass_ (color attachment + depth attachment, clear/store).
+  /// Creates colorImage_/colorImageMemory_/colorImageView_, the
+  /// multisampled color target the render pass resolves into the
+  /// swapchain image. No-ops (leaves them null) when sampleCount() is 1,
+  /// i.e. anti-aliasing is off.
+  void createColorResources();
+  /// Creates renderPass_: color + depth attachments, plus a resolve
+  /// attachment when sampleCount() > 1.
   void createRenderPass();
   /// Creates descriptorSetLayout_: one combined-image-sampler binding,
   /// fragment stage, matching `layout(binding = 0) uniform sampler2D` in
@@ -179,6 +191,11 @@ private:
   /// Wraps precompiled SPIR-V `code` in a vk::ShaderModule; caller destroys it.
   vk::ShaderModule createShaderModule(const std::vector<std::uint32_t> &code) const;
 
+  /// @return currentSettings_.antiAliasing translated to a sample count
+  ///         and clamped to maxSampleCount_ -- the single source of truth
+  ///         every swapchain-dependent object builds against.
+  vk::SampleCountFlagBits sampleCount() const;
+
   /// @return The live GpuMesh for `handle`, or nullptr if it's invalid,
   ///         out of range, destroyed, or from a reused (stale) slot.
   const GpuMesh *findMesh(MeshHandle handle) const;
@@ -191,6 +208,14 @@ private:
   /// Set by requestResize(); consumed (and cleared) at the start of the
   /// next renderFrame().
   bool framebufferResized_{false};
+
+  /// Live anti-aliasing/vsync request; sampleCount() and createSwapchain()
+  /// both read this. Updated by applySettings().
+  RenderSettings currentSettings_{};
+  /// Highest MSAA sample count physicalDevice_ supports for both color and
+  /// depth attachments, capped at e8 (AntiAliasing's own ceiling); set once
+  /// in pickPhysicalDevice().
+  vk::SampleCountFlagBits maxSampleCount_{vk::SampleCountFlagBits::e1};
 
   vk::Instance instance_{};
   vk::SurfaceKHR surface_{};
@@ -212,6 +237,12 @@ private:
   vk::Image depthImage_{};
   vk::DeviceMemory depthImageMemory_{};
   vk::ImageView depthImageView_{};
+
+  /// The multisampled color attachment the render pass resolves into the
+  /// swapchain image; null when sampleCount() is 1 (anti-aliasing off).
+  vk::Image colorImage_{};
+  vk::DeviceMemory colorImageMemory_{};
+  vk::ImageView colorImageView_{};
 
   vk::DescriptorSetLayout descriptorSetLayout_{};
   vk::Sampler textureSampler_{};

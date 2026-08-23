@@ -47,6 +47,18 @@ public:
   /// @param height New framebuffer height in pixels.
   virtual void requestResize(std::uint32_t width, std::uint32_t height) = 0;
 
+  /// Requests a new anti-aliasing/vsync configuration.
+  /// @param settings Requested settings; a value the hardware can't
+  ///        satisfy (e.g. an unsupported MSAA level) is clamped rather
+  ///        than rejected.
+  /// @return Applied if handled internally, RequiresRecreate if the
+  ///         caller must destroy and reconstruct this Renderer instead.
+  virtual ApplyResult applySettings(const RenderSettings &settings) = 0;
+
+  /// @return What this backend's current device actually supports, so a
+  ///         caller can offer only meaningful choices.
+  virtual RendererCapabilities queryCapabilities() const = 0;
+
 protected:
   Renderer() = default;
 };
