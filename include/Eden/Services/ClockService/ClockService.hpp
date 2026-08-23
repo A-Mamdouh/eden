@@ -5,7 +5,7 @@
 
 #include <chrono>
 
-namespace Eden {
+namespace Eden::Services {
 
 /// Real-time clock with an optional fixed-timestep accumulator for
 /// simulation stepping (consumeFixedStep()), independent of frame rate.
@@ -14,7 +14,7 @@ class ClockService : public IService {
 public:
   /// @param clockConfig Fixed-step size, frame-delta clamp, and initial
   ///        time scale; defaults to 60Hz simulation, uncapped real time.
-  explicit ClockService(Config::ClockConfig clockConfig = {}) : clockConfig_{clockConfig} {}
+  explicit ClockService(Config::Clock::ClockConfig clockConfig = {}) : clockConfig_{clockConfig} {}
   std::string getName() override { return "Clock Service"; }
 
     /// Called once per Engine::run() iteration.
@@ -45,7 +45,7 @@ public:
     /// @return The value last passed to setPaused(); false initially.
     bool isPaused() const;
     /// @param scale Multiplier applied to simulation time; see
-    ///        Config::ClockConfig::timeScale.
+    ///        Config::Clock::ClockConfig::timeScale.
     void setTimeScale(double scale);
 
 protected:
@@ -60,7 +60,7 @@ private:
   double simTimeTotal_ = {0.0f};
   double realTimeTotal_ = {0.0f};
   bool paused_{false};
-  Config::ClockConfig clockConfig_;
+  Config::Clock::ClockConfig clockConfig_;
 };
 
-} // namespace Eden
+} // namespace Eden::Services

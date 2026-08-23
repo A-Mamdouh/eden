@@ -5,7 +5,7 @@
 
 #include <array>
 
-namespace Eden {
+namespace Eden::Rendering {
 
 /// A camera's view frustum, as six inward-facing planes extracted from a
 /// combined view-projection matrix. Used to skip draw commands for
@@ -34,4 +34,4 @@ private:
   std::array<Vec4, 6> planes_{};
 };
 
-} // namespace Eden
+} // namespace Eden::Rendering

@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Eden {
+namespace Eden::Input {
 
 /// Vendor-neutral key identifiers InputSystem tracks -- deliberately a
 /// small, hand-picked set (movement keys plus a couple of modifiers)
@@ -23,4 +23,4 @@ enum class Key {
   Right,
 };
 
-} // namespace Eden
+} // namespace Eden::Input

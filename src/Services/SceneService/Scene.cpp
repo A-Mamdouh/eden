@@ -1,6 +1,6 @@
 #include "Eden/Services/SceneService/Scene.hpp"
 
-namespace Eden {
+namespace Eden::World {
 
 void Scene::destroyEntity(Entity *entity) {
   registry_.destroy(entity->handle());
@@ -12,4 +12,4 @@ Entity Scene::getEntity(entt::entity handle) const {
   return registry.valid(handle) ? Entity{handle, &registry} : Entity{};
 }
 
-} // namespace Eden
+} // namespace Eden::World

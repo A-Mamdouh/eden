@@ -8,6 +8,10 @@
 namespace Demo {
 namespace {
 
+using namespace Eden::World;
+using namespace Eden::Rendering;
+using namespace Eden::Rendering::Components;
+
 /// Room extents: a square plaza the camera starts inside, walled on all
 /// four sides but open on top -- flying up and over the walls is a
 /// deliberate way to exercise FreeFlyCamera's E/Q vertical movement.
@@ -15,11 +19,11 @@ constexpr float kRoomHalfExtent = 8.0f;
 constexpr float kWallHeight = 3.0f;
 constexpr float kWallThickness = 0.4f;
 
-Eden::Entity spawnBox(Eden::Scene &scene, Eden::MeshHandle cubeMesh, Eden::MaterialHandle material,
-                      const Eden::Vec3 &position, const Eden::Vec3 &scale) {
+Entity spawnBox(Scene &scene, MeshHandle cubeMesh, MaterialHandle material,
+                const Eden::Vec3 &position, const Eden::Vec3 &scale) {
   auto entity = scene.createEntity();
-  entity.addComponent<Eden::Transform>(Eden::Transform{.position = position, .scale = scale});
-  entity.addComponent<Eden::Renderable>(Eden::Renderable{.mesh = cubeMesh, .material = material});
+  entity.addComponent<Transform>(Transform{.position = position, .scale = scale});
+  entity.addComponent<Renderable>(Renderable{.mesh = cubeMesh, .material = material});
   return entity;
 }
 
@@ -28,40 +32,41 @@ Eden::Entity spawnBox(Eden::Scene &scene, Eden::MeshHandle cubeMesh, Eden::Mater
 /// entity -- the Camera component holds position/target/up, the script
 /// drives them from input each frame -- so there's exactly one entity for
 /// setActiveCamera() to point at.
-Eden::Entity spawnFreeFlyCamera(Eden::Scene &scene, const Eden::Vec3 &position) {
+Entity spawnFreeFlyCamera(Scene &scene, const Eden::Vec3 &position) {
   auto entity = scene.createEntity();
-  entity.addComponent<Eden::Camera>(Eden::Camera{.position = position});
-  entity.addComponent<Eden::ScriptComponent>(entity, scene, std::make_unique<FreeFlyCamera>());
+  entity.addComponent<Camera>(Camera{.position = position});
+  entity.addComponent<Eden::Scripting::Components::ScriptComponent>(entity, scene,
+                                                                     std::make_unique<FreeFlyCamera>());
   return entity;
 }
 
 } // namespace
 
-std::unique_ptr<Eden::Scene> buildDemoScene(Eden::Engine &engine, const DemoMeshes &meshes,
-                                            Eden::Model signModel) {
-  auto scene = std::make_unique<Eden::Scene>();
+std::unique_ptr<Eden::World::Scene> buildDemoScene(Eden::Engine &engine, const DemoMeshes &meshes,
+                                                    Eden::Rendering::Model signModel) {
+  auto scene = std::make_unique<Scene>();
 
-  const Eden::MaterialHandle floorMaterial =
-      engine.createMaterial(Eden::Material{.tint = {0.55f, 0.53f, 0.5f, 1.0f}, .useVertexColor = false});
-  const Eden::MaterialHandle wallMaterial =
-      engine.createMaterial(Eden::Material{.tint = {0.35f, 0.4f, 0.5f, 1.0f}, .useVertexColor = false});
-  const Eden::MaterialHandle pillarMaterialA =
-      engine.createMaterial(Eden::Material{.tint = {0.8f, 0.3f, 0.25f, 1.0f}, .useVertexColor = false});
-  const Eden::MaterialHandle pillarMaterialB =
-      engine.createMaterial(Eden::Material{.tint = {0.3f, 0.7f, 0.35f, 1.0f}, .useVertexColor = false});
-  const Eden::MaterialHandle pillarMaterialC =
-      engine.createMaterial(Eden::Material{.tint = {0.85f, 0.75f, 0.25f, 1.0f}, .useVertexColor = false});
-  const Eden::MaterialHandle pillarMaterialD =
-      engine.createMaterial(Eden::Material{.tint = {0.55f, 0.35f, 0.75f, 1.0f}, .useVertexColor = false});
-  const Eden::MaterialHandle beaconMaterial = engine.createMaterial(Eden::Material{});
+  const MaterialHandle floorMaterial =
+      engine.createMaterial(Material{.tint = {0.55f, 0.53f, 0.5f, 1.0f}, .useVertexColor = false});
+  const MaterialHandle wallMaterial =
+      engine.createMaterial(Material{.tint = {0.35f, 0.4f, 0.5f, 1.0f}, .useVertexColor = false});
+  const MaterialHandle pillarMaterialA =
+      engine.createMaterial(Material{.tint = {0.8f, 0.3f, 0.25f, 1.0f}, .useVertexColor = false});
+  const MaterialHandle pillarMaterialB =
+      engine.createMaterial(Material{.tint = {0.3f, 0.7f, 0.35f, 1.0f}, .useVertexColor = false});
+  const MaterialHandle pillarMaterialC =
+      engine.createMaterial(Material{.tint = {0.85f, 0.75f, 0.25f, 1.0f}, .useVertexColor = false});
+  const MaterialHandle pillarMaterialD =
+      engine.createMaterial(Material{.tint = {0.55f, 0.35f, 0.75f, 1.0f}, .useVertexColor = false});
+  const MaterialHandle beaconMaterial = engine.createMaterial(Material{});
 
   // Floor: the quad's own vertices lie in its local XY plane, so a 90
   // degree rotation about X lays it flat; scale becomes its world-space
   // width (X) and depth (Z).
   auto floor = scene->createEntity();
-  floor.addComponent<Eden::Transform>(Eden::Transform{
+  floor.addComponent<Transform>(Transform{
       .rotationEuler = {90.0f, 0.0f, 0.0f}, .scale = {2.0f * kRoomHalfExtent, 2.0f * kRoomHalfExtent, 1.0f}});
-  floor.addComponent<Eden::Renderable>(Eden::Renderable{.mesh = meshes.quad, .material = floorMaterial});
+  floor.addComponent<Renderable>(Renderable{.mesh = meshes.quad, .material = floorMaterial});
 
   // Perimeter walls, extended slightly past the room's corners so they
   // overlap instead of leaving gaps.
@@ -88,7 +93,7 @@ std::unique_ptr<Eden::Scene> buildDemoScene(Eden::Engine &engine, const DemoMesh
   // own entity through.
   auto beacon =
       spawnBox(*scene, meshes.cube, beaconMaterial, {0.0f, 1.25f, 0.0f}, {1.2f, 2.5f, 1.2f});
-  beacon.addComponent<Eden::ScriptComponent>(beacon, *scene, std::make_unique<PulseTint>());
+  beacon.addComponent<Eden::Scripting::Components::ScriptComponent>(beacon, *scene, std::make_unique<PulseTint>());
 
   // Proves Engine::loadModel() alongside the hand-built entities above,
   // mounted as a sign against the north wall's interior face. The gltf
@@ -96,8 +101,8 @@ std::unique_ptr<Eden::Scene> buildDemoScene(Eden::Engine &engine, const DemoMesh
   // demo/assets/quad.gltf), so this entity's Y sits 1.3 above the sign's
   // intended world-space center to compensate.
   auto sign = scene->createEntity();
-  sign.addComponent<Eden::Transform>(Eden::Transform{.position = {-3.0f, 2.8f, -kRoomHalfExtent + 0.4f}});
-  sign.addComponent<Eden::Model>(std::move(signModel));
+  sign.addComponent<Transform>(Transform{.position = {-3.0f, 2.8f, -kRoomHalfExtent + 0.4f}});
+  sign.addComponent<Model>(std::move(signModel));
 
   // Starts just inside the south wall, facing the beacon. setActiveCamera()
   // just needs this entity's id, so it's fine to call before loadScene()

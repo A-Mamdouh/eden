@@ -5,9 +5,11 @@
 
 #include <memory>
 
-namespace Eden {
-
+namespace Eden::World {
 class Scene;
+}
+
+namespace Eden::Scripting::Components {
 
 /// Attaches a ScriptBehaviour to an entity; ScriptSystem drives it.
 /// Requires its own entity and owning Scene at construction rather than
@@ -22,19 +24,20 @@ struct ScriptComponent {
   /// @param behaviour The behavior instance ScriptSystem drives; null
   ///        (the default) is a valid "no script yet" state that
   ///        ScriptSystem silently skips.
-  ScriptComponent(Entity entity, Scene &scene, std::unique_ptr<ScriptBehaviour> behaviour = nullptr)
+  ScriptComponent(World::Entity entity, World::Scene &scene,
+                  std::unique_ptr<Scripting::ScriptBehaviour> behaviour = nullptr)
       : entity{entity}, scene{&scene}, behaviour{std::move(behaviour)} {
     if (this->behaviour) {
       this->behaviour->attach(entity, scene);
     }
   }
 
-  Entity entity;
-  Scene *scene;
-  std::unique_ptr<ScriptBehaviour> behaviour;
+  World::Entity entity;
+  World::Scene *scene;
+  std::unique_ptr<Scripting::ScriptBehaviour> behaviour;
   /// Set by ScriptSystem after the first onStart() call. User code
   /// populating this component should leave it at the default.
   bool started{false};
 };
 
-} // namespace Eden
+} // namespace Eden::Scripting::Components

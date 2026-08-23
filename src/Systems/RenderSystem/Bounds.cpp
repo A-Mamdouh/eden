@@ -1,6 +1,6 @@
 #include "Eden/Systems/RenderSystem/Bounds.hpp"
 
-namespace Eden {
+namespace Eden::Rendering {
 
 AABB computeBounds(std::span<const Vertex> vertices) {
   if (vertices.empty()) {
@@ -17,4 +17,4 @@ AABB computeBounds(std::span<const Vertex> vertices) {
   return AABB{min, max};
 }
 
-} // namespace Eden
+} // namespace Eden::Rendering

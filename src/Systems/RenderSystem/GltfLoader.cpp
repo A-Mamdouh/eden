@@ -20,7 +20,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace Eden {
+namespace Eden::Rendering {
 namespace {
 
 /// RAII owner for a cgltf_data*, so early throws don't leak it.
@@ -152,7 +152,7 @@ PrimitiveGeometry extractGeometry(const cgltf_primitive &primitive) {
 
 } // namespace
 
-Model loadGltfModel(const std::string &path, RenderSystem &renderSystem) {
+Model loadGltfModel(const std::string &path, Systems::RenderSystem &renderSystem) {
   cgltf_options options{};
   cgltf_data *rawData = nullptr;
 
@@ -249,4 +249,4 @@ Model loadGltfModel(const std::string &path, RenderSystem &renderSystem) {
   return model;
 }
 
-} // namespace Eden
+} // namespace Eden::Rendering

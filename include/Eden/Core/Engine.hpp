@@ -9,14 +9,24 @@
 #include <memory>
 #include <vector>
 
-namespace Eden {
+namespace Eden::Services {
 class ClockService;
 class ConfigService;
 class EventService;
-class ISystem;
-class RenderSystem;
-class Scene;
 class SceneService;
+} // namespace Eden::Services
+
+namespace Eden::Systems {
+class RenderSystem;
+} // namespace Eden::Systems
+
+namespace Eden::World {
+class Scene;
+} // namespace Eden::World
+
+namespace Eden {
+
+class ISystem;
 
 /// Composition root: owns every Service and System and drives the main
 /// loop. Construct one with an ApplicationConfig, then call run().
@@ -44,7 +54,7 @@ public:
   /// Forwards to SceneService::loadScene(); the embedding application
   /// never touches SceneService directly.
   /// @param scene New active scene; the previous one, if any, is destroyed.
-  void loadScene(std::unique_ptr<Scene> scene);
+  void loadScene(std::unique_ptr<World::Scene> scene);
 
   /// @return The current live configuration; reflects any prior
   ///         updateConfig() call, not just what was passed to the
@@ -64,43 +74,43 @@ public:
   /// Transform to place it in the world) to actually put it in a scene.
   /// @param path Path to a .gltf or .glb file.
   /// @throws std::runtime_error on any parse/load failure.
-  Model loadModel(const std::string &path);
+  Rendering::Model loadModel(const std::string &path);
 
   /// Forwards to RenderSystem's owned Renderer; the embedding application
   /// creates meshes this way instead of touching RenderSystem/Renderer
   /// directly.
   /// @param desc Vertex/index data to upload; only needs to stay valid
   ///        for the duration of this call.
-  MeshHandle createMesh(const MeshDesc &desc);
+  Rendering::MeshHandle createMesh(const Rendering::MeshDesc &desc);
   /// @param handle Handle previously returned by createMesh(); a stale
   ///        or already-destroyed handle silently no-ops.
-  void destroyMesh(MeshHandle handle);
+  void destroyMesh(Rendering::MeshHandle handle);
 
   /// Forwards to RenderSystem's owned Renderer.
   /// @param desc Texel data to upload; only needs to stay valid for the
   ///        duration of this call.
-  TextureHandle createTexture(const TextureDesc &desc);
+  Rendering::TextureHandle createTexture(const Rendering::TextureDesc &desc);
   /// @param handle Handle previously returned by createTexture(); a stale
   ///        or already-destroyed handle silently no-ops.
-  void destroyTexture(TextureHandle handle);
+  void destroyTexture(Rendering::TextureHandle handle);
 
   /// Forwards to RenderSystem's material storage; see Material.hpp.
-  MaterialHandle createMaterial(const Material &desc);
+  Rendering::MaterialHandle createMaterial(const Rendering::Material &desc);
   /// @param handle Handle previously returned by createMaterial(); a
   ///        stale or already-destroyed handle silently no-ops.
-  void destroyMaterial(MaterialHandle handle);
+  void destroyMaterial(Rendering::MaterialHandle handle);
 
   /// Selects which entity's Camera component RenderSystem renders from
   /// each frame; forwards to RenderSystem::setActiveCamera(). Safe to
   /// call before loadScene(), and safe across later scene changes -- see
   /// RenderSystem::setActiveCamera() for why.
   /// @param camera Entity expected to carry a Camera component.
-  void setActiveCamera(Entity camera);
+  void setActiveCamera(World::Entity camera);
   /// @return The entity passed to the most recent setActiveCamera()
   ///         call, resolved against the current active scene.
   ///         Entity::valid() is false if none was set or it no longer
   ///         exists in that scene.
-  Entity activeCamera() const;
+  World::Entity activeCamera() const;
 
 private:
   /// Constructs and initializes EventService, ConfigService,
@@ -115,13 +125,13 @@ private:
   Config::ApplicationConfig config_;
   bool running_{false};
 
-  std::shared_ptr<EventService> eventService_{};
-  std::unique_ptr<ConfigService> configService_{};
-  std::unique_ptr<ClockService> clockService_{};
-  std::unique_ptr<SceneService> sceneService_{};
+  std::shared_ptr<Services::EventService> eventService_{};
+  std::unique_ptr<Services::ConfigService> configService_{};
+  std::unique_ptr<Services::ClockService> clockService_{};
+  std::unique_ptr<Services::SceneService> sceneService_{};
 
   std::vector<std::unique_ptr<ISystem>> systems_{};
-  RenderSystem *renderSystem_{nullptr};
+  Systems::RenderSystem *renderSystem_{nullptr};
 };
 
 } // namespace Eden

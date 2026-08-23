@@ -2,7 +2,7 @@
 #include "Config.hpp"
 #include "Eden/Services/IService.hpp"
 
-namespace Eden {
+namespace Eden::Services {
 
   /// Owns the live ApplicationConfig and publishes ConfigUpdatedEvent
   /// when it changes.
@@ -23,4 +23,4 @@ namespace Eden {
       Config::ApplicationConfig config_;
   };
 
-} // namespace Eden
+} // namespace Eden::Services

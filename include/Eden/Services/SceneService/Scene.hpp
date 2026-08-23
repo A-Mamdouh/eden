@@ -6,7 +6,7 @@
 
 #include <vector>
 
-namespace Eden {
+namespace Eden::World {
 
 /// Owns the set of active entities and their components for one loaded
 /// scene. SceneService owns the active Scene instance; systems that need
@@ -71,4 +71,4 @@ private:
   entt::registry registry_;
 };
 
-} // namespace Eden
+} // namespace Eden::World

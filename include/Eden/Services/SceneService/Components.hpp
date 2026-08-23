@@ -6,7 +6,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
-namespace Eden {
+namespace Eden::World {
 
 /// Local-space transform. Composed into a matrix via localMatrix();
 /// world-space placement is computed separately by TransformSystem,
@@ -46,6 +46,10 @@ struct WorldTransform {
   Mat4 matrix{1.0f};
 };
 
+} // namespace Eden::World
+
+namespace Eden::Rendering::Components {
+
 /// Placement and lens parameters for viewing the scene -- pure data, no
 /// notion of being "the" camera. RenderSystem renders from whichever
 /// entity is selected via RenderSystem::setActiveCamera(); a Camera
@@ -77,4 +81,4 @@ struct Camera {
   }
 };
 
-} // namespace Eden
+} // namespace Eden::Rendering::Components

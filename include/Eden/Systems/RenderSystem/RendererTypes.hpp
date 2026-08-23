@@ -6,7 +6,7 @@
 #include <span>
 #include <vector>
 
-namespace Eden {
+namespace Eden::Rendering {
 
 /// Opaque, backend-owned resource id. Tag-templated so e.g. a MeshHandle
 /// can't be passed where a TextureHandle is expected. `generation` lets a
@@ -158,4 +158,4 @@ enum class ApplyResult {
   RequiresRecreate,
 };
 
-} // namespace Eden
+} // namespace Eden::Rendering

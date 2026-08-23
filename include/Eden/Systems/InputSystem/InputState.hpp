@@ -5,7 +5,11 @@
 
 #include <vector>
 
-namespace Eden {
+namespace Eden::Systems {
+class InputSystem;
+} // namespace Eden::Systems
+
+namespace Eden::Input {
 
 /// This frame's keyboard/mouse state -- the data half of InputSystem,
 /// analogous to how Scene is the data half of SceneService. InputSystem
@@ -43,7 +47,7 @@ public:
   bool mouseCaptured() const { return mouseCaptured_; }
 
 private:
-  friend class InputSystem;
+  friend class Systems::InputSystem;
 
   std::vector<bool> previousKeys_{};
   std::vector<bool> currentKeys_{};
@@ -52,4 +56,4 @@ private:
   bool mouseCaptured_{false};
 };
 
-} // namespace Eden
+} // namespace Eden::Input

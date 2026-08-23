@@ -12,7 +12,10 @@
 /// which field changed, including backend/validation-layer choices --
 /// there's no separate "construction-only" config, since a caller that
 /// wants to e.g. swap Renderer backends at runtime should be able to.
-namespace Eden::Config {
+/// Grouped by domain, mirroring Eden's other namespaces: only the two
+/// aggregates that necessarily span every domain (EngineConfig,
+/// ApplicationConfig) live directly in Eden::Config.
+namespace Eden::Config::Rendering {
 
 /// Which Renderer implementation to construct.
 enum class RendererBackend { Vulkan, Null };
@@ -39,7 +42,7 @@ struct DisplaySettings {
   /// Window/display height in pixels.
   std::uint32_t height{720};
   /// Present-mode preference; see Renderer::applySettings().
-  VsyncMode vsync{VsyncMode::On};
+  Eden::Rendering::VsyncMode vsync{Eden::Rendering::VsyncMode::On};
   /// Target frames per second; 0 means uncapped. Not currently enforced
   /// anywhere (no frame limiter exists yet), reserved for when one is added.
   float targetFrameRate{0.0f};
@@ -50,7 +53,7 @@ struct DisplaySettings {
 /// window-level fields.
 struct GraphicsSettings {
   /// Anti-aliasing level; see Renderer::applySettings().
-  AntiAliasing antiAliasing{AntiAliasing::None};
+  Eden::Rendering::AntiAliasing antiAliasing{Eden::Rendering::AntiAliasing::None};
 };
 
 /// Rendering backend parameters, owned by RenderSystem -- everything
@@ -66,12 +69,9 @@ struct RenderConfig {
   GraphicsSettings graphics{};
 };
 
-/// JobService worker-pool sizing. Currently unused: JobService's
-/// constructor doesn't take this config, and nothing wires it up.
-struct JobServiceConfig {
-  /// Worker thread count. See struct doc: not wired up yet.
-  int numWorkers{4};
-};
+} // namespace Eden::Config::Rendering
+
+namespace Eden::Config::Clock {
 
 /// ClockService fixed-timestep and time-scaling parameters.
 struct ClockConfig {
@@ -85,14 +85,29 @@ struct ClockConfig {
   double timeScale{1.0};
 };
 
+} // namespace Eden::Config::Clock
+
+namespace Eden::Config::Jobs {
+
+/// JobService worker-pool sizing. Currently unused: JobService's
+/// constructor doesn't take this config, and nothing wires it up.
+struct JobServiceConfig {
+  /// Worker thread count. See struct doc: not wired up yet.
+  int numWorkers{4};
+};
+
+} // namespace Eden::Config::Jobs
+
+namespace Eden::Config {
+
 /// Aggregate of every subsystem's configuration; one instance per Engine.
 struct EngineConfig {
   /// Passed to RenderSystem's constructor.
-  RenderConfig render{};
+  Rendering::RenderConfig render{};
   /// Passed to ClockService's constructor.
-  ClockConfig clock{};
-  /// See JobServiceConfig -- not currently consumed by anything.
-  JobServiceConfig jobs{};
+  Clock::ClockConfig clock{};
+  /// See Jobs::JobServiceConfig -- not currently consumed by anything.
+  Jobs::JobServiceConfig jobs{};
 };
 
 /// Top-level config an application supplies to Engine's constructor.

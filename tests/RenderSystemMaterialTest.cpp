@@ -8,19 +8,23 @@
 // don't need -- createMaterial()/destroyMaterial() are pure bookkeeping
 // over RenderSystem's own material slots, untouched by renderer_.
 
-TEST(RenderSystemMaterialTest, CreateMaterialReturnsValidHandle) {
-  Eden::SceneService sceneService;
-  Eden::RenderSystem renderSystem{Eden::Config::RenderConfig{}, sceneService};
+using namespace Eden::Services;
+using namespace Eden::Systems;
+using namespace Eden::Rendering;
 
-  const auto handle = renderSystem.createMaterial(Eden::Material{});
+TEST(RenderSystemMaterialTest, CreateMaterialReturnsValidHandle) {
+  SceneService sceneService;
+  RenderSystem renderSystem{Eden::Config::Rendering::RenderConfig{}, sceneService};
+
+  const auto handle = renderSystem.createMaterial(Material{});
 
   EXPECT_TRUE(handle.valid());
 }
 
 TEST(RenderSystemMaterialTest, DestroyMaterialThenDestroyAgainIsSafe) {
-  Eden::SceneService sceneService;
-  Eden::RenderSystem renderSystem{Eden::Config::RenderConfig{}, sceneService};
-  const auto handle = renderSystem.createMaterial(Eden::Material{});
+  SceneService sceneService;
+  RenderSystem renderSystem{Eden::Config::Rendering::RenderConfig{}, sceneService};
+  const auto handle = renderSystem.createMaterial(Material{});
 
   renderSystem.destroyMaterial(handle);
 
@@ -28,19 +32,19 @@ TEST(RenderSystemMaterialTest, DestroyMaterialThenDestroyAgainIsSafe) {
 }
 
 TEST(RenderSystemMaterialTest, DestroyingAnInvalidHandleIsSafe) {
-  Eden::SceneService sceneService;
-  Eden::RenderSystem renderSystem{Eden::Config::RenderConfig{}, sceneService};
+  SceneService sceneService;
+  RenderSystem renderSystem{Eden::Config::Rendering::RenderConfig{}, sceneService};
 
-  EXPECT_NO_THROW(renderSystem.destroyMaterial(Eden::MaterialHandle{}));
+  EXPECT_NO_THROW(renderSystem.destroyMaterial(MaterialHandle{}));
 }
 
 TEST(RenderSystemMaterialTest, HandleGenerationChangesWhenSlotIsReused) {
-  Eden::SceneService sceneService;
-  Eden::RenderSystem renderSystem{Eden::Config::RenderConfig{}, sceneService};
+  SceneService sceneService;
+  RenderSystem renderSystem{Eden::Config::Rendering::RenderConfig{}, sceneService};
 
-  const auto first = renderSystem.createMaterial(Eden::Material{});
+  const auto first = renderSystem.createMaterial(Material{});
   renderSystem.destroyMaterial(first);
-  const auto second = renderSystem.createMaterial(Eden::Material{});
+  const auto second = renderSystem.createMaterial(Material{});
 
   EXPECT_EQ(first.id, second.id);
   EXPECT_NE(first.generation, second.generation);

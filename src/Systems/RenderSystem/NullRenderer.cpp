@@ -1,6 +1,6 @@
 #include "Eden/Systems/RenderSystem/NullRenderer.hpp"
 
-namespace Eden {
+namespace Eden::Rendering {
 
 MeshHandle NullRenderer::createMesh(const MeshDesc &desc) {
   NullMesh mesh{};
@@ -102,4 +102,4 @@ RendererCapabilities NullRenderer::queryCapabilities() const {
   return RendererCapabilities{AntiAliasing::MSAA8x};
 }
 
-} // namespace Eden
+} // namespace Eden::Rendering

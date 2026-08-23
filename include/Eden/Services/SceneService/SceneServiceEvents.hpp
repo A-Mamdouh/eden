@@ -9,6 +9,6 @@ namespace Eden::Events {
   struct SceneLoadedEvent : IEvent {
     /// The newly loaded scene; SceneService takes ownership immediately
     /// after publishing this event.
-    const Scene *scene;
+    const World::Scene *scene;
   };
 }

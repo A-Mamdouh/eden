@@ -8,8 +8,8 @@ namespace Demo {
 /// stand-in for real asset loading for the hand-built parts of the scene
 /// (walls, pillars, floor); loadModel() supplies the rest.
 struct DemoMeshes {
-  Eden::MeshHandle quad{};
-  Eden::MeshHandle cube{};
+  Eden::Rendering::MeshHandle quad{};
+  Eden::Rendering::MeshHandle cube{};
 };
 
 DemoMeshes createDemoMeshes(Eden::Engine &engine);

@@ -6,7 +6,7 @@
 
 struct SDL_Window;
 
-namespace Eden {
+namespace Eden::Rendering {
 
 class Renderer;
 
@@ -24,4 +24,4 @@ class Renderer;
 std::unique_ptr<Renderer> createVulkanRenderer(SDL_Window *window, bool enableValidationLayers,
                                                const RenderSettings &initialSettings);
 
-} // namespace Eden
+} // namespace Eden::Rendering

@@ -3,7 +3,7 @@
 #include "Eden/Systems/ISystem.hpp"
 #include "Eden/Systems/InputSystem/InputState.hpp"
 
-namespace Eden {
+namespace Eden::Systems {
 
 /// Polls SDL's keyboard/mouse state once per frame into its owned
 /// InputState, then publishes Events::InputStateUpdatedEvent -- the only
@@ -33,14 +33,14 @@ public:
 
   /// @return This frame's input state. Also reachable, without a direct
   ///         dependency on InputSystem, via Events::InputStateUpdatedEvent.
-  InputState &state() { return state_; }
+  Input::InputState &state() { return state_; }
   /// @overload
-  const InputState &state() const { return state_; }
+  const Input::InputState &state() const { return state_; }
 
 private:
   void onInit() override {}
 
-  InputState state_{};
+  Input::InputState state_{};
 };
 
-} // namespace Eden
+} // namespace Eden::Systems

@@ -22,7 +22,7 @@
 #define EDEN_SHADER_DIR ""
 #endif
 
-namespace Eden {
+namespace Eden::Rendering {
 namespace {
 
 constexpr std::array<const char *, 1> kValidationLayers = {
@@ -1611,4 +1611,4 @@ std::unique_ptr<Renderer> createVulkanRenderer(SDL_Window *window, bool enableVa
       .window = window, .enableValidationLayers = enableValidationLayers, .initialSettings = initialSettings});
 }
 
-} // namespace Eden
+} // namespace Eden::Rendering

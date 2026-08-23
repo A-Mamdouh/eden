@@ -7,14 +7,20 @@
 
 #include "EdenTestBase.hpp"
 
+using namespace Eden::Services;
+using namespace Eden::World;
+using namespace Eden::Systems;
+using namespace Eden::Input;
+using namespace Eden::Scripting;
+
 class ScriptSystemTest : public EdenTest::EdenTestBase {};
 
 namespace {
 
-class RecordingScript : public Eden::ScriptBehaviour {
+class RecordingScript : public ScriptBehaviour {
 public:
-  void onStart(Eden::InputState &) override { ++startCount; }
-  void onUpdate(double dt, Eden::InputState &) override {
+  void onStart(InputState &) override { ++startCount; }
+  void onUpdate(double dt, InputState &) override {
     ++updateCount;
     lastDt = dt;
   }
@@ -24,33 +30,33 @@ public:
   double lastDt{0.0};
 };
 
-class MoveScript : public Eden::ScriptBehaviour {
+class MoveScript : public ScriptBehaviour {
 public:
-  void onUpdate(double dt, Eden::InputState &) override {
-    entity().getComponent<Eden::Transform>().position.x += static_cast<float>(dt);
+  void onUpdate(double dt, InputState &) override {
+    entity().getComponent<Transform>().position.x += static_cast<float>(dt);
   }
 };
 
 } // namespace
 
 TEST_F(ScriptSystemTest, OnStartIsCalledExactlyOnce) {
-  Eden::SceneService sceneService;
+  SceneService sceneService;
   sceneService.init(eventService);
 
-  auto scenePtr = std::make_unique<Eden::Scene>();
+  auto scenePtr = std::make_unique<Scene>();
   auto entity = scenePtr->createEntity();
   auto script = std::make_unique<RecordingScript>();
   RecordingScript *scriptPtr = script.get();
-  entity.addComponent<Eden::ScriptComponent>(entity, *scenePtr, std::move(script));
+  entity.addComponent<Components::ScriptComponent>(entity, *scenePtr, std::move(script));
   sceneService.loadScene(std::move(scenePtr));
 
-  Eden::ScriptSystem scriptSystem{sceneService};
+  ScriptSystem scriptSystem{sceneService};
   scriptSystem.init(eventService);
 
   // ScriptSystem's inputState_ only becomes non-null once InputSystem
   // has published at least one Events::InputStateUpdatedEvent, same as
   // in Engine's real per-frame ordering (Input before Script).
-  Eden::InputSystem inputSystem;
+  InputSystem inputSystem;
   inputSystem.init(eventService);
   inputSystem.update(0.0);
 
@@ -63,23 +69,23 @@ TEST_F(ScriptSystemTest, OnStartIsCalledExactlyOnce) {
 }
 
 TEST_F(ScriptSystemTest, OnUpdateReceivesTheFrameDt) {
-  Eden::SceneService sceneService;
+  SceneService sceneService;
   sceneService.init(eventService);
 
-  auto scenePtr = std::make_unique<Eden::Scene>();
+  auto scenePtr = std::make_unique<Scene>();
   auto entity = scenePtr->createEntity();
   auto script = std::make_unique<RecordingScript>();
   RecordingScript *scriptPtr = script.get();
-  entity.addComponent<Eden::ScriptComponent>(entity, *scenePtr, std::move(script));
+  entity.addComponent<Components::ScriptComponent>(entity, *scenePtr, std::move(script));
   sceneService.loadScene(std::move(scenePtr));
 
-  Eden::ScriptSystem scriptSystem{sceneService};
+  ScriptSystem scriptSystem{sceneService};
   scriptSystem.init(eventService);
 
   // ScriptSystem's inputState_ only becomes non-null once InputSystem
   // has published at least one Events::InputStateUpdatedEvent, same as
   // in Engine's real per-frame ordering (Input before Script).
-  Eden::InputSystem inputSystem;
+  InputSystem inputSystem;
   inputSystem.init(eventService);
   inputSystem.update(0.0);
   scriptSystem.update(0.25);
@@ -88,21 +94,21 @@ TEST_F(ScriptSystemTest, OnUpdateReceivesTheFrameDt) {
 }
 
 TEST_F(ScriptSystemTest, EntityWithNullBehaviourIsSkipped) {
-  Eden::SceneService sceneService;
+  SceneService sceneService;
   sceneService.init(eventService);
 
-  auto scenePtr = std::make_unique<Eden::Scene>();
+  auto scenePtr = std::make_unique<Scene>();
   auto entity = scenePtr->createEntity();
-  entity.addComponent<Eden::ScriptComponent>(entity, *scenePtr);
+  entity.addComponent<Components::ScriptComponent>(entity, *scenePtr);
   sceneService.loadScene(std::move(scenePtr));
 
-  Eden::ScriptSystem scriptSystem{sceneService};
+  ScriptSystem scriptSystem{sceneService};
   scriptSystem.init(eventService);
 
   // ScriptSystem's inputState_ only becomes non-null once InputSystem
   // has published at least one Events::InputStateUpdatedEvent, same as
   // in Engine's real per-frame ordering (Input before Script).
-  Eden::InputSystem inputSystem;
+  InputSystem inputSystem;
   inputSystem.init(eventService);
   inputSystem.update(0.0);
 
@@ -110,25 +116,25 @@ TEST_F(ScriptSystemTest, EntityWithNullBehaviourIsSkipped) {
 }
 
 TEST_F(ScriptSystemTest, ScriptCanMutateItsOwnComponents) {
-  Eden::SceneService sceneService;
+  SceneService sceneService;
   sceneService.init(eventService);
 
-  auto scenePtr = std::make_unique<Eden::Scene>();
+  auto scenePtr = std::make_unique<Scene>();
   auto entity = scenePtr->createEntity();
-  entity.addComponent<Eden::Transform>();
-  entity.addComponent<Eden::ScriptComponent>(entity, *scenePtr, std::make_unique<MoveScript>());
+  entity.addComponent<Transform>();
+  entity.addComponent<Components::ScriptComponent>(entity, *scenePtr, std::make_unique<MoveScript>());
   sceneService.loadScene(std::move(scenePtr));
 
-  Eden::ScriptSystem scriptSystem{sceneService};
+  ScriptSystem scriptSystem{sceneService};
   scriptSystem.init(eventService);
 
   // ScriptSystem's inputState_ only becomes non-null once InputSystem
   // has published at least one Events::InputStateUpdatedEvent, same as
   // in Engine's real per-frame ordering (Input before Script).
-  Eden::InputSystem inputSystem;
+  InputSystem inputSystem;
   inputSystem.init(eventService);
   inputSystem.update(0.0);
   scriptSystem.update(2.0);
 
-  EXPECT_FLOAT_EQ(entity.getComponent<Eden::Transform>().position.x, 2.0f);
+  EXPECT_FLOAT_EQ(entity.getComponent<Transform>().position.x, 2.0f);
 }

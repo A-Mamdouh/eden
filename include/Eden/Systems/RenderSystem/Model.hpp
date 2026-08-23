@@ -6,7 +6,7 @@
 
 #include <vector>
 
-namespace Eden {
+namespace Eden::Rendering {
 
 /// One mesh+material piece of a Model, positioned relative to the Model's
 /// owning entity by localTransform (baked from the source asset's node
@@ -26,4 +26,4 @@ struct Model {
   std::vector<ModelPart> parts;
 };
 
-} // namespace Eden
+} // namespace Eden::Rendering

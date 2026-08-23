@@ -2,11 +2,19 @@
 
 #include "Eden/Services/SceneService/Entity.hpp"
 
-namespace Eden {
-
+namespace Eden::Input {
 class InputState;
+}
+
+namespace Eden::World {
 class Scene;
+}
+
+namespace Eden::Scripting::Components {
 struct ScriptComponent;
+} // namespace Eden::Scripting::Components
+
+namespace Eden::Scripting {
 
 /// Base class for per-entity behavior. Derive from this, override
 /// onUpdate() (and optionally onStart()) to read/write the entity's own
@@ -30,29 +38,29 @@ public:
   virtual ~ScriptBehaviour() = default;
 
   /// Called once, the first time ScriptSystem ticks this entity.
-  virtual void onStart(InputState & /*input*/) {}
+  virtual void onStart(Input::InputState & /*input*/) {}
 
   /// Called once per frame, after onStart() has already run.
   /// @param dt Frame delta time in seconds.
   /// @param input This frame's keyboard/mouse state.
-  virtual void onUpdate(double dt, InputState &input) = 0;
+  virtual void onUpdate(double dt, Input::InputState &input) = 0;
 
   /// @return This behaviour's owning entity.
-  Entity entity() const { return entity_; }
+  World::Entity entity() const { return entity_; }
   /// @return This entity's owning Scene.
-  Scene &scene() const { return *scene_; }
+  World::Scene &scene() const { return *scene_; }
 
 private:
-  friend struct ScriptComponent;
+  friend struct Components::ScriptComponent;
   /// Called exactly once, by ScriptComponent's constructor, before
   /// onStart()/onUpdate() ever run.
-  void attach(Entity entity, Scene &scene) {
+  void attach(World::Entity entity, World::Scene &scene) {
     entity_ = entity;
     scene_ = &scene;
   }
 
-  Entity entity_;
-  Scene *scene_{nullptr};
+  World::Entity entity_;
+  World::Scene *scene_{nullptr};
 };
 
-} // namespace Eden
+} // namespace Eden::Scripting

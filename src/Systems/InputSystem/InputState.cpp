@@ -2,7 +2,7 @@
 
 #include <SDL.h>
 
-namespace Eden {
+namespace Eden::Input {
 
 namespace {
 
@@ -52,4 +52,4 @@ bool InputState::isKeyPressed(Key key) const {
   return scancode < currentKeys_.size() && currentKeys_[scancode] && !previousKeys_[scancode];
 }
 
-} // namespace Eden
+} // namespace Eden::Input

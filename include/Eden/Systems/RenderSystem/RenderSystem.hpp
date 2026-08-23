@@ -15,15 +15,23 @@
 
 struct SDL_Window;
 
-namespace Eden {
-
+namespace Eden::Rendering {
 class Renderer;
-class Scene;
-class SceneService;
+}
 
-namespace Events {
+namespace Eden::World {
+class Scene;
+}
+
+namespace Eden::Services {
+class SceneService;
+}
+
+namespace Eden::Events {
 struct ConfigUpdatedEvent;
 }
+
+namespace Eden::Systems {
 
 /// Owns the SDL window and the active Renderer backend; polls window/OS
 /// events and drives one Renderer::renderFrame() per update(), built from
@@ -40,7 +48,7 @@ class RenderSystem : public ISystem {
   ///        window chrome, display settings, graphics settings.
   /// @param sceneService Queried each update() for the active scene to
   ///        draw; a null active scene renders just the clear color.
-  RenderSystem(Config::RenderConfig renderConfig, SceneService &sceneService);
+  RenderSystem(Config::Rendering::RenderConfig renderConfig, Services::SceneService &sceneService);
   ~RenderSystem() override;
 
   std::string getName() override { return "Render System"; }
@@ -54,28 +62,28 @@ class RenderSystem : public ISystem {
   /// embedding application actually calls, never this directly.
   /// @param desc Vertex/index data to upload; only needs to stay valid
   ///        for the duration of this call.
-  MeshHandle createMesh(const MeshDesc &desc);
+  Rendering::MeshHandle createMesh(const Rendering::MeshDesc &desc);
   /// @param handle Handle previously returned by createMesh(); a stale
   ///        or already-destroyed handle silently no-ops.
-  void destroyMesh(MeshHandle handle);
+  void destroyMesh(Rendering::MeshHandle handle);
 
   /// Forwards to the owned Renderer; see createMesh().
-  TextureHandle createTexture(const TextureDesc &desc);
+  Rendering::TextureHandle createTexture(const Rendering::TextureDesc &desc);
   /// @param handle Handle previously returned by createTexture(); a stale
   ///        or already-destroyed handle silently no-ops.
-  void destroyTexture(TextureHandle handle);
+  void destroyTexture(Rendering::TextureHandle handle);
 
   /// Stores `desc`; a Renderable referencing the returned handle resolves
   /// it into a DrawCommand's texture/tint/useVertexColor each frame.
-  MaterialHandle createMaterial(const Material &desc);
+  Rendering::MaterialHandle createMaterial(const Rendering::Material &desc);
   /// @param handle Handle previously returned by createMaterial(); a
   ///        stale or already-destroyed handle silently no-ops.
-  void destroyMaterial(MaterialHandle handle);
+  void destroyMaterial(Rendering::MaterialHandle handle);
 
   /// Loads a glTF/GLB file's meshes, textures, and materials, returning
   /// them as a Model. See Engine::loadModel(), the intended entry point.
   /// @throws std::runtime_error on any parse/load failure.
-  Model loadModel(const std::string &path);
+  Rendering::Model loadModel(const std::string &path);
 
   /// Selects which entity's Camera component to render from each frame.
   /// Stores just the entity id and re-resolves it against whichever
@@ -85,12 +93,12 @@ class RenderSystem : public ISystem {
   /// @param camera Entity expected to carry a Camera component; one that
   ///        doesn't is silently skipped at render time, same as no
   ///        camera being set at all.
-  void setActiveCamera(Entity camera);
+  void setActiveCamera(World::Entity camera);
   /// @return The entity passed to the most recent setActiveCamera()
   ///         call, resolved against the current active scene.
   ///         Entity::valid() is false if none was set, there's no active
   ///         scene, or the entity no longer exists in it.
-  Entity activeCamera() const;
+  World::Entity activeCamera() const;
 
   private:
   /// Creates the SDL window, constructs the configured Renderer backend,
@@ -116,7 +124,7 @@ class RenderSystem : public ISystem {
   /// Model+WorldTransform entities into a RenderFrame. @return A frame
   /// with just the clear color and no draw commands if there's no active
   /// scene.
-  RenderFrame buildFrameFromScene() const;
+  Rendering::RenderFrame buildFrameFromScene() const;
   /// @param scene Scene to resolve the entity set via setActiveCamera()
   ///        against.
   /// @return That camera's view/projection, using the current window
@@ -124,31 +132,32 @@ class RenderSystem : public ISystem {
   ///         live Camera in `scene`, an aspect-corrected orthographic
   ///         projection (identity view) so camera-less scenes still
   ///         render undistorted.
-  CameraDesc resolveCamera(Scene &scene) const;
+  Rendering::CameraDesc resolveCamera(World::Scene &scene) const;
   /// @return The live Material for `handle`, or nullptr if it's invalid,
   ///         out of range, destroyed, or from a reused (stale) slot.
-  const Material *resolveMaterial(MaterialHandle handle) const;
+  const Rendering::Material *resolveMaterial(Rendering::MaterialHandle handle) const;
   /// Resolves `material` into tint/useVertexColor/texture (Material's
   /// defaults if invalid/destroyed), then applies `tintOverride` if
   /// present. Shared by the Renderable and Model draw-building loops in
   /// buildFrameFromScene().
-  DrawCommand buildDrawCommand(MeshHandle mesh, MaterialHandle material, const Mat4 &transform,
-                               const TintOverride *tintOverride) const;
+  Rendering::DrawCommand buildDrawCommand(Rendering::MeshHandle mesh, Rendering::MaterialHandle material,
+                                          const Mat4 &transform,
+                                          const Rendering::Components::TintOverride *tintOverride) const;
   /// @return `mesh`'s cached object-space AABB (computed once in
   ///         createMesh()), or nullptr if the handle is invalid, out of
   ///         range, or from a reused (stale) slot -- buildFrameFromScene()
   ///         treats "no bounds" as "don't cull", never as "cull".
-  const AABB *resolveMeshBounds(MeshHandle mesh) const;
+  const Rendering::AABB *resolveMeshBounds(Rendering::MeshHandle mesh) const;
 
-  Config::RenderConfig renderConfig_;
-  SceneService &sceneService_;
+  Config::Rendering::RenderConfig renderConfig_;
+  Services::SceneService &sceneService_;
 
   SDL_Window *window_{nullptr};
-  std::unique_ptr<Renderer> renderer_{nullptr};
+  std::unique_ptr<Rendering::Renderer> renderer_{nullptr};
   bool quitRequested_{false};
 
   /// Set in onInit(), unsubscribed in shutdown().
-  std::optional<ListenerId> configListener_{};
+  std::optional<Services::ListenerId> configListener_{};
 
   /// Updated on window creation and every resize event; drives the
   /// active Camera's aspect ratio.
@@ -164,7 +173,7 @@ class RenderSystem : public ISystem {
   /// Tracks just enough to validate handle lifetime, mirroring
   /// VulkanRenderer's mesh/texture slot+generation scheme.
   struct MaterialSlot {
-    Material material{};
+    Rendering::Material material{};
     std::uint32_t generation{0};
     bool alive{false};
   };
@@ -178,10 +187,10 @@ class RenderSystem : public ISystem {
   /// the next time that slot's id is reused, and generation guards any
   /// lookup against a stale handle in between.
   struct MeshBoundsSlot {
-    AABB bounds{};
+    Rendering::AABB bounds{};
     std::uint32_t generation{0};
   };
   std::vector<MeshBoundsSlot> meshBounds_{};
 };
 
-} // namespace Eden
+} // namespace Eden::Systems

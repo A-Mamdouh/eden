@@ -17,9 +17,13 @@
 #include <stdexcept>
 #include <utility>
 
-namespace Eden {
+namespace Eden::Systems {
+using namespace Eden::Rendering;
+using namespace Eden::Rendering::Components;
+using namespace Eden::World;
+using namespace Eden::Services;
 
-RenderSystem::RenderSystem(Config::RenderConfig renderConfig, SceneService &sceneService)
+RenderSystem::RenderSystem(Config::Rendering::RenderConfig renderConfig, SceneService &sceneService)
     : renderConfig_{std::move(renderConfig)}, sceneService_{sceneService} {}
 
 RenderSystem::~RenderSystem() { shutdown(); }
@@ -52,13 +56,13 @@ void RenderSystem::createWindow() {
     windowFlags |= SDL_WINDOW_RESIZABLE;
   }
   switch (renderConfig_.display.screenMode) {
-  case Config::ScreenMode::Borderless:
+  case Config::Rendering::ScreenMode::Borderless:
     windowFlags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
     break;
-  case Config::ScreenMode::Fullscreen:
+  case Config::Rendering::ScreenMode::Fullscreen:
     windowFlags |= SDL_WINDOW_FULLSCREEN;
     break;
-  case Config::ScreenMode::Windowed:
+  case Config::Rendering::ScreenMode::Windowed:
   default:
     break;
   }
@@ -86,10 +90,10 @@ void RenderSystem::createRenderer() {
 
   const RenderSettings settings{renderConfig_.graphics.antiAliasing, renderConfig_.display.vsync};
   switch (renderConfig_.backend) {
-  case Config::RendererBackend::Null:
+  case Config::Rendering::RendererBackend::Null:
     renderer_ = std::make_unique<NullRenderer>();
     break;
-  case Config::RendererBackend::Vulkan:
+  case Config::Rendering::RendererBackend::Vulkan:
   default:
     renderer_ = createVulkanRenderer(window_, renderConfig_.enableValidationLayers, settings);
     break;
@@ -97,8 +101,8 @@ void RenderSystem::createRenderer() {
 }
 
 void RenderSystem::onConfigUpdated(const Events::ConfigUpdatedEvent &event) {
-  const Config::RenderConfig &oldConfig = renderConfig_;
-  const Config::RenderConfig &newConfig = event.newConfig->engine.render;
+  const Config::Rendering::RenderConfig &oldConfig = renderConfig_;
+  const Config::Rendering::RenderConfig &newConfig = event.newConfig->engine.render;
 
   if (newConfig.window.title != oldConfig.window.title) {
     SDL_SetWindowTitle(window_, newConfig.window.title.c_str());
@@ -113,13 +117,13 @@ void RenderSystem::onConfigUpdated(const Events::ConfigUpdatedEvent &event) {
   if (newConfig.display.screenMode != oldConfig.display.screenMode) {
     Uint32 flag = 0;
     switch (newConfig.display.screenMode) {
-    case Config::ScreenMode::Borderless:
+    case Config::Rendering::ScreenMode::Borderless:
       flag = SDL_WINDOW_FULLSCREEN_DESKTOP;
       break;
-    case Config::ScreenMode::Fullscreen:
+    case Config::Rendering::ScreenMode::Fullscreen:
       flag = SDL_WINDOW_FULLSCREEN;
       break;
-    case Config::ScreenMode::Windowed:
+    case Config::Rendering::ScreenMode::Windowed:
     default:
       flag = 0;
       break;
@@ -401,4 +405,4 @@ void RenderSystem::shutdown() {
   SDL_Quit();
 }
 
-} // namespace Eden
+} // namespace Eden::Systems

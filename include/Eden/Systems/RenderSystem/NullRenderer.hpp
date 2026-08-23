@@ -4,7 +4,7 @@
 
 #include <vector>
 
-namespace Eden {
+namespace Eden::Rendering {
 
 /// Headless Renderer implementation: no window, no GPU, no graphics API
 /// calls. Exists for two reasons -- proving the Renderer contract is
@@ -76,4 +76,4 @@ private:
   RenderSettings settings_{};
 };
 
-} // namespace Eden
+} // namespace Eden::Rendering

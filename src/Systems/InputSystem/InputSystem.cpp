@@ -5,7 +5,7 @@
 
 #include <SDL.h>
 
-namespace Eden {
+namespace Eden::Systems {
 
 void InputSystem::update(double /*dt*/) {
   int numKeys = 0;
@@ -45,10 +45,10 @@ void InputSystem::update(double /*dt*/) {
   // Guarded, unlike other systems' publish() calls: InputSystem is
   // deliberately usable (see InputSystemTest) without init() ever having
   // been called, since none of its SDL calls above need it either.
-  if (EventService *eventService = getEventService()) {
+  if (Services::EventService *eventService = getEventService()) {
     eventService->publish<Events::InputStateUpdatedEvent>(
         Events::InputStateUpdatedEvent{.state = &state_});
   }
 }
 
-} // namespace Eden
+} // namespace Eden::Systems

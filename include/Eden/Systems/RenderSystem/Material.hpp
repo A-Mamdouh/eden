@@ -2,7 +2,7 @@
 
 #include "Eden/Systems/RenderSystem/RendererTypes.hpp"
 
-namespace Eden {
+namespace Eden::Rendering {
 
 /// Tag type for MaterialHandle; never instantiated.
 struct MaterialTag {};
@@ -23,4 +23,4 @@ struct Material {
   bool useVertexColor{true};
 };
 
-} // namespace Eden
+} // namespace Eden::Rendering

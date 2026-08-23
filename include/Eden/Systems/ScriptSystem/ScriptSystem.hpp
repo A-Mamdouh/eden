@@ -5,10 +5,15 @@
 
 #include <optional>
 
-namespace Eden {
-
+namespace Eden::Services {
 class SceneService;
+}
+
+namespace Eden::Input {
 class InputState;
+}
+
+namespace Eden::Systems {
 
 /// Drives every entity's ScriptComponent each frame: calls
 /// ScriptBehaviour::onStart() once, then onUpdate() every frame after.
@@ -20,7 +25,7 @@ class ScriptSystem : public ISystem {
 public:
   /// @param sceneService Queried each update() for the active scene;
   ///        a null active scene is a no-op, not an error.
-  explicit ScriptSystem(SceneService &sceneService) : sceneService_{sceneService} {}
+  explicit ScriptSystem(Services::SceneService &sceneService) : sceneService_{sceneService} {}
 
   std::string getName() override { return "Script System"; }
   void update(double dt) override;
@@ -32,13 +37,13 @@ private:
   /// directly -- see InputSystemEvents.hpp.
   void onInit() override;
 
-  SceneService &sceneService_;
+  Services::SceneService &sceneService_;
   /// Latest InputState from Events::InputStateUpdatedEvent; null until
   /// InputSystem's first update() (always before ScriptSystem's own,
   /// per Engine's registration order), forwarded to every ScriptBehaviour
   /// call this drives.
-  InputState *inputState_{nullptr};
-  std::optional<ListenerId> inputStateListener_{};
+  Input::InputState *inputState_{nullptr};
+  std::optional<Services::ListenerId> inputStateListener_{};
 };
 
-} // namespace Eden
+} // namespace Eden::Systems

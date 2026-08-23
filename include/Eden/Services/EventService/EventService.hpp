@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-namespace Eden {
+namespace Eden::Services {
 
 class EventService;
 
@@ -104,4 +104,4 @@ void EventService::publish(const EventType &event) const {
   }
 }
 
-} // namespace Eden
+} // namespace Eden::Services

@@ -5,7 +5,7 @@
 #include "Eden/Systems/InputSystem/InputSystemEvents.hpp"
 #include "Eden/Systems/ScriptSystem/ScriptComponent.hpp"
 
-namespace Eden {
+namespace Eden::Systems {
 
 void ScriptSystem::onInit() {
   inputStateListener_ = getEventService()->subscribe<Events::InputStateUpdatedEvent>(
@@ -20,14 +20,14 @@ void ScriptSystem::shutdown() {
 }
 
 void ScriptSystem::update(double dt) {
-  Scene *scene = sceneService_.activeScene();
+  World::Scene *scene = sceneService_.activeScene();
   if (!scene || !inputState_) {
     return;
   }
 
   auto &registry = scene->getRegistry();
-  for (const auto entityHandle : registry.view<ScriptComponent>()) {
-    auto &scriptComponent = registry.get<ScriptComponent>(entityHandle);
+  for (const auto entityHandle : registry.view<Scripting::Components::ScriptComponent>()) {
+    auto &scriptComponent = registry.get<Scripting::Components::ScriptComponent>(entityHandle);
     if (!scriptComponent.behaviour) {
       continue;
     }
@@ -40,4 +40,4 @@ void ScriptSystem::update(double dt) {
   }
 }
 
-} // namespace Eden
+} // namespace Eden::Systems

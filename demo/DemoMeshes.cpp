@@ -5,27 +5,29 @@
 
 namespace Demo {
 
+using namespace Eden::Rendering;
+
 DemoMeshes createDemoMeshes(Eden::Engine &engine) {
-  const std::array<Eden::Vertex, 6> quadVertices{
-      Eden::Vertex{Eden::Vec3{-0.5f, 0.5f, 0.0f}, Eden::Color{1.0f, 1.0f, 1.0f, 1.0f}},
-      Eden::Vertex{Eden::Vec3{0.5f, 0.5f, 0.0f}, Eden::Color{1.0f, 1.0f, 1.0f, 1.0f}},
-      Eden::Vertex{Eden::Vec3{0.5f, -0.5f, 0.0f}, Eden::Color{1.0f, 1.0f, 1.0f, 1.0f}},
-      Eden::Vertex{Eden::Vec3{0.5f, -0.5f, 0.0f}, Eden::Color{1.0f, 1.0f, 1.0f, 1.0f}},
-      Eden::Vertex{Eden::Vec3{-0.5f, -0.5f, 0.0f}, Eden::Color{1.0f, 1.0f, 1.0f, 1.0f}},
-      Eden::Vertex{Eden::Vec3{-0.5f, 0.5f, 0.0f}, Eden::Color{1.0f, 1.0f, 1.0f, 1.0f}},
+  const std::array<Vertex, 6> quadVertices{
+      Vertex{Eden::Vec3{-0.5f, 0.5f, 0.0f}, Color{1.0f, 1.0f, 1.0f, 1.0f}},
+      Vertex{Eden::Vec3{0.5f, 0.5f, 0.0f}, Color{1.0f, 1.0f, 1.0f, 1.0f}},
+      Vertex{Eden::Vec3{0.5f, -0.5f, 0.0f}, Color{1.0f, 1.0f, 1.0f, 1.0f}},
+      Vertex{Eden::Vec3{0.5f, -0.5f, 0.0f}, Color{1.0f, 1.0f, 1.0f, 1.0f}},
+      Vertex{Eden::Vec3{-0.5f, -0.5f, 0.0f}, Color{1.0f, 1.0f, 1.0f, 1.0f}},
+      Vertex{Eden::Vec3{-0.5f, 0.5f, 0.0f}, Color{1.0f, 1.0f, 1.0f, 1.0f}},
   };
 
   // Unit cube, -0.5..0.5 on every axis; indexed so walls/pillars/floor can
   // all reuse one upload, scaled per-instance via Transform::scale.
-  const std::array<Eden::Vertex, 8> cubeVertices{
-      Eden::Vertex{Eden::Vec3{-0.5f, -0.5f, -0.5f}, Eden::Color{1.0f, 1.0f, 1.0f, 1.0f}},
-      Eden::Vertex{Eden::Vec3{0.5f, -0.5f, -0.5f}, Eden::Color{1.0f, 1.0f, 1.0f, 1.0f}},
-      Eden::Vertex{Eden::Vec3{0.5f, 0.5f, -0.5f}, Eden::Color{1.0f, 1.0f, 1.0f, 1.0f}},
-      Eden::Vertex{Eden::Vec3{-0.5f, 0.5f, -0.5f}, Eden::Color{1.0f, 1.0f, 1.0f, 1.0f}},
-      Eden::Vertex{Eden::Vec3{-0.5f, -0.5f, 0.5f}, Eden::Color{1.0f, 1.0f, 1.0f, 1.0f}},
-      Eden::Vertex{Eden::Vec3{0.5f, -0.5f, 0.5f}, Eden::Color{1.0f, 1.0f, 1.0f, 1.0f}},
-      Eden::Vertex{Eden::Vec3{0.5f, 0.5f, 0.5f}, Eden::Color{1.0f, 1.0f, 1.0f, 1.0f}},
-      Eden::Vertex{Eden::Vec3{-0.5f, 0.5f, 0.5f}, Eden::Color{1.0f, 1.0f, 1.0f, 1.0f}},
+  const std::array<Vertex, 8> cubeVertices{
+      Vertex{Eden::Vec3{-0.5f, -0.5f, -0.5f}, Color{1.0f, 1.0f, 1.0f, 1.0f}},
+      Vertex{Eden::Vec3{0.5f, -0.5f, -0.5f}, Color{1.0f, 1.0f, 1.0f, 1.0f}},
+      Vertex{Eden::Vec3{0.5f, 0.5f, -0.5f}, Color{1.0f, 1.0f, 1.0f, 1.0f}},
+      Vertex{Eden::Vec3{-0.5f, 0.5f, -0.5f}, Color{1.0f, 1.0f, 1.0f, 1.0f}},
+      Vertex{Eden::Vec3{-0.5f, -0.5f, 0.5f}, Color{1.0f, 1.0f, 1.0f, 1.0f}},
+      Vertex{Eden::Vec3{0.5f, -0.5f, 0.5f}, Color{1.0f, 1.0f, 1.0f, 1.0f}},
+      Vertex{Eden::Vec3{0.5f, 0.5f, 0.5f}, Color{1.0f, 1.0f, 1.0f, 1.0f}},
+      Vertex{Eden::Vec3{-0.5f, 0.5f, 0.5f}, Color{1.0f, 1.0f, 1.0f, 1.0f}},
   };
   const std::array<std::uint32_t, 36> cubeIndices{
       0, 1, 2, 0, 2, 3, // back
@@ -37,8 +39,8 @@ DemoMeshes createDemoMeshes(Eden::Engine &engine) {
   };
 
   return DemoMeshes{
-      .quad = engine.createMesh(Eden::MeshDesc{quadVertices}),
-      .cube = engine.createMesh(Eden::MeshDesc{cubeVertices, cubeIndices}),
+      .quad = engine.createMesh(MeshDesc{quadVertices}),
+      .cube = engine.createMesh(MeshDesc{cubeVertices, cubeIndices}),
   };
 }
 

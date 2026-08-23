@@ -16,7 +16,7 @@ struct InputStateUpdatedEvent : public IEvent {
   /// InputSystem's lifetime, which outlives this event. Non-const since
   /// subscribers (e.g. a script via ScriptBehaviour) legitimately mutate
   /// it too, e.g. setMouseCaptured().
-  InputState *state;
+  Input::InputState *state;
 };
 
 } // namespace Eden::Events

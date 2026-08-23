@@ -12,6 +12,10 @@
 #include <spdlog/spdlog.h>
 
 namespace Eden {
+using namespace Services;
+using namespace Systems;
+using namespace World;
+using namespace Rendering;
 
 Engine::Engine(const Config::ApplicationConfig &appConfig) : config_{appConfig} {
   init();

@@ -5,17 +5,19 @@
 #include <chrono>
 #include <thread>
 
+using namespace Eden::Services;
+
 class ClockServiceTest : public EdenTest::EdenTestBase {};
 
 TEST_F(ClockServiceTest, TickReturnsNonNegativeDelta) {
-  Eden::ClockService clock;
+  ClockService clock;
   clock.init(eventService);
 
   EXPECT_GE(clock.tick(), 0.0);
 }
 
 TEST_F(ClockServiceTest, PausedTickReturnsZero) {
-  Eden::ClockService clock;
+  ClockService clock;
   clock.init(eventService);
   clock.setPaused(true);
 
@@ -24,7 +26,7 @@ TEST_F(ClockServiceTest, PausedTickReturnsZero) {
 }
 
 TEST_F(ClockServiceTest, TimeScaleZeroFreezesFrameDt) {
-  Eden::ClockService clock;
+  ClockService clock;
   clock.init(eventService);
   clock.setTimeScale(0.0);
 
@@ -34,9 +36,9 @@ TEST_F(ClockServiceTest, TimeScaleZeroFreezesFrameDt) {
 }
 
 TEST_F(ClockServiceTest, FrameDtIsClampedToMaxFrameDt) {
-  Eden::Config::ClockConfig config{};
+  Eden::Config::Clock::ClockConfig config{};
   config.maxFrameDt = 0.05;
-  Eden::ClockService clock{config};
+  ClockService clock{config};
   clock.init(eventService);
 
   std::this_thread::sleep_for(std::chrono::milliseconds(150));
@@ -45,7 +47,7 @@ TEST_F(ClockServiceTest, FrameDtIsClampedToMaxFrameDt) {
 }
 
 TEST_F(ClockServiceTest, RealTimeAccumulatesEvenWhilePaused) {
-  Eden::ClockService clock;
+  ClockService clock;
   clock.init(eventService);
   clock.setPaused(true);
 
@@ -56,17 +58,17 @@ TEST_F(ClockServiceTest, RealTimeAccumulatesEvenWhilePaused) {
 }
 
 TEST_F(ClockServiceTest, FixedDtReturnsConfiguredValue) {
-  Eden::Config::ClockConfig config{};
+  Eden::Config::Clock::ClockConfig config{};
   config.fixedDt = 0.125;
-  Eden::ClockService clock{config};
+  ClockService clock{config};
 
   EXPECT_DOUBLE_EQ(clock.fixedDt(), 0.125);
 }
 
 TEST_F(ClockServiceTest, ConsumeFixedStepFalseBeforeEnoughTimeAccumulates) {
-  Eden::Config::ClockConfig config{};
+  Eden::Config::Clock::ClockConfig config{};
   config.fixedDt = 10.0;
-  Eden::ClockService clock{config};
+  ClockService clock{config};
   clock.init(eventService);
 
   clock.tick();
@@ -75,9 +77,9 @@ TEST_F(ClockServiceTest, ConsumeFixedStepFalseBeforeEnoughTimeAccumulates) {
 }
 
 TEST_F(ClockServiceTest, ConsumeFixedStepTrueOnceEnoughTimeAccumulates) {
-  Eden::Config::ClockConfig config{};
+  Eden::Config::Clock::ClockConfig config{};
   config.fixedDt = 0.01;
-  Eden::ClockService clock{config};
+  ClockService clock{config};
   clock.init(eventService);
 
   clock.tick();

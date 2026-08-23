@@ -10,7 +10,7 @@
 
 struct SDL_Window;
 
-namespace Eden {
+namespace Eden::Rendering {
 
 /// Vulkan implementation of the Renderer contract. Single frame in
 /// flight (one command buffer, one fence), host-visible/coherent memory
@@ -283,4 +283,4 @@ private:
   TextureHandle defaultTexture_{};
 };
 
-} // namespace Eden
+} // namespace Eden::Rendering

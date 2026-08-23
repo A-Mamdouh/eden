@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-namespace Eden {
+namespace Eden::Rendering {
 
 /// Backend-agnostic rendering contract. No Vulkan/Metal/D3D12 type may
 /// appear below this line. Backend-specific setup (native window handle,
@@ -63,4 +63,4 @@ protected:
   Renderer() = default;
 };
 
-} // namespace Eden
+} // namespace Eden::Rendering

@@ -1,6 +1,6 @@
 #include "Eden/Services/JobService/JobService.hpp"
 
-namespace Eden {
+namespace Eden::Services {
 
 void JobService::submit(Job job) {
     activeJobs_++;
@@ -46,4 +46,4 @@ void JobService::workerLoop() {
       std::this_thread::yield();
     }
   }
-}
+} // namespace Eden::Services
