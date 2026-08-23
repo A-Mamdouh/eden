@@ -31,8 +31,7 @@ Eden::Entity spawnBox(Eden::Scene &scene, Eden::MeshHandle cubeMesh, Eden::Mater
 Eden::Entity spawnFreeFlyCamera(Eden::Scene &scene, const Eden::Vec3 &position) {
   auto entity = scene.createEntity();
   entity.addComponent<Eden::Camera>(Eden::Camera{.position = position});
-  entity.addComponent<Eden::ScriptComponent>(
-      Eden::ScriptComponent{.behaviour = std::make_unique<FreeFlyCamera>()});
+  entity.addComponent<Eden::ScriptComponent>(entity, scene, std::make_unique<FreeFlyCamera>());
   return entity;
 }
 
@@ -89,7 +88,7 @@ std::unique_ptr<Eden::Scene> buildDemoScene(Eden::Engine &engine, const DemoMesh
   // own entity through.
   auto beacon =
       spawnBox(*scene, meshes.cube, beaconMaterial, {0.0f, 1.25f, 0.0f}, {1.2f, 2.5f, 1.2f});
-  beacon.addComponent<Eden::ScriptComponent>(Eden::ScriptComponent{.behaviour = std::make_unique<PulseTint>()});
+  beacon.addComponent<Eden::ScriptComponent>(beacon, *scene, std::make_unique<PulseTint>());
 
   // Proves Engine::loadModel() alongside the hand-built entities above,
   // mounted as a sign against the north wall's interior face. The gltf

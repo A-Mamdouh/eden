@@ -100,11 +100,13 @@ Both hooks receive the owning :cpp:class:`Eden::Entity`, so a script
 reads/writes its own components the same way any other code does --
 ``entity.getComponent<TintOverride>().tint = ...``, for example.
 
-Both hooks also receive an :cpp:class:`Eden::InputSystem`, non-const
+Both hooks also receive an :cpp:class:`Eden::InputState`, non-const
 because scripts legitimately mutate it too (e.g. releasing mouse
 capture), not just query it -- see Input below. Beyond that, still
 deliberately minimal: no querying other entities, no access to
-Renderer/EventService.
+Renderer/EventService, and no :cpp:class:`Eden::InputSystem` either --
+:cpp:class:`Eden::InputState` is the entire query/request surface a
+script needs.
 
 ``demo/scripts/PulseTint.hpp`` is the reference example for reading
 components: it animates an entity's color through a ``sin(time)`` pulse
@@ -117,25 +119,44 @@ through the same ``ScriptBehaviour`` hooks -- see Input below.
 Input
 -----
 
-:cpp:class:`Eden::InputSystem` polls SDL's keyboard/mouse state once per
-frame via ``SDL_GetKeyboardState()``/``SDL_GetRelativeMouseState()`` and
-exposes it as simple queries (:cpp:func:`Eden::InputSystem::isKeyDown`,
-:cpp:func:`Eden::InputSystem::isKeyPressed` for the up-to-down edge,
-:cpp:func:`Eden::InputSystem::mouseDelta`) plus
-:cpp:func:`Eden::InputSystem::setMouseCaptured` for mouselook (hides the
-cursor and reports unbounded relative motion instead of a
-screen-edge-clamped position). Keys are identified by the vendor-neutral
-:cpp:enum:`Eden::Key` rather than an SDL scancode, keeping SDL out of
-every public header the way ``Vec3``/``Mat4`` keep glm's types out.
+:cpp:class:`Eden::InputState` is the data half of input -- keyboard/mouse
+state plus the small query/request API over it
+(:cpp:func:`Eden::InputState::isKeyDown`,
+:cpp:func:`Eden::InputState::isKeyPressed` for the up-to-down edge,
+:cpp:func:`Eden::InputState::mouseDelta`,
+:cpp:func:`Eden::InputState::mousePosition` for absolute window
+coordinates, e.g. UI hit-testing, and
+:cpp:func:`Eden::InputState::setMouseCaptured` for mouselook, which only
+records the request here) -- the same role :cpp:class:`Eden::Scene` plays
+for :cpp:class:`Eden::SceneService`. Keys are identified by the
+vendor-neutral :cpp:enum:`Eden::Key` rather than an SDL scancode, keeping
+SDL out of every public header the way ``Vec3``/``Mat4`` keep glm's
+types out.
 
-Deliberately polling-style rather than an event stream: that covers
-everything a movement/mouselook script actually needs, without needing
-to fan discrete events out to listeners the way ``EventService`` does.
-It doesn't own SDL's event queue either -- ``RenderSystem`` still pumps
-that directly for quit/resize, exactly as before; ``SDL_GetKeyboardState``/
-``SDL_GetRelativeMouseState`` read input-device state that
-``SDL_PumpEvents`` (called internally by whichever of the two runs first
-each frame) keeps current, without draining the same queue
+:cpp:class:`Eden::InputSystem` owns one ``InputState`` and is the only
+thing that actually touches SDL: each ``update()`` polls
+``SDL_GetKeyboardState()``/``SDL_GetRelativeMouseState()``/
+``SDL_GetMouseState()`` into it, reconciles any pending
+``setMouseCaptured()`` request against real SDL relative-mouse-mode
+(applying ``SDL_SetRelativeMouseMode()`` only on a transition), then
+publishes ``Events::InputStateUpdatedEvent`` carrying a pointer to that
+``InputState``. This is how :cpp:class:`Eden::ScriptSystem` reaches it --
+subscribing once in its own ``onInit()`` and caching the pointer -- rather
+than depending on ``InputSystem`` directly, matching every other
+subsystem's rule of talking only through ``EventService``.
+``InputSystem::update()`` always runs before ``ScriptSystem::update()``
+in Engine's per-frame system order, so by the time a script runs, the
+``InputState`` it was handed already reflects this frame's fresh input,
+not last frame's.
+
+Deliberately polling-style rather than a discrete event stream: that
+covers everything a movement/mouselook script actually needs, without
+fanning per-keystroke events out to listeners. ``InputSystem`` doesn't
+own SDL's event queue either -- ``RenderSystem`` still pumps that
+directly for quit/resize, exactly as before; ``SDL_GetKeyboardState``/
+``SDL_GetRelativeMouseState``/``SDL_GetMouseState`` read input-device
+state that ``SDL_PumpEvents`` (called internally by whichever of the two
+runs first each frame) keeps current, without draining the same queue
 ``RenderSystem`` polls, so the two coexist safely.
 
 Rendering
@@ -272,8 +293,8 @@ Testing
 ``EventService`` pub/sub, ``ClockService`` timing/pause/scale behavior,
 ``Scene``/``Entity``/component round-tripping, ``TransformSystem``'s
 hierarchy composition, ``ScriptSystem``'s start/update contract,
-``InputSystem``'s query methods (constructed without calling ``init()``
-either -- ``SDL_GetKeyboardState``/``SDL_PumpEvents``/
+``InputSystem``'s ``InputState`` query methods (constructed without
+calling ``init()`` either -- ``SDL_GetKeyboardState``/``SDL_PumpEvents``/
 ``SDL_GetRelativeMouseState`` are all safe to call before ``SDL_Init``,
 which is what makes this testable without a window),
 ``NullRenderer``'s mesh/texture handle lifecycle, ``RenderSystem``'s

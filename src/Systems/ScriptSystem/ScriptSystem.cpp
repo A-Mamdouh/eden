@@ -2,13 +2,26 @@
 
 #include "Eden/Services/SceneService/Scene.hpp"
 #include "Eden/Services/SceneService/SceneService.hpp"
+#include "Eden/Systems/InputSystem/InputSystemEvents.hpp"
 #include "Eden/Systems/ScriptSystem/ScriptComponent.hpp"
 
 namespace Eden {
 
+void ScriptSystem::onInit() {
+  inputStateListener_ = getEventService()->subscribe<Events::InputStateUpdatedEvent>(
+      [this](const Events::InputStateUpdatedEvent &event) { inputState_ = event.state; });
+}
+
+void ScriptSystem::shutdown() {
+  if (inputStateListener_) {
+    getEventService()->unsubscribe<Events::InputStateUpdatedEvent>(*inputStateListener_);
+    inputStateListener_.reset();
+  }
+}
+
 void ScriptSystem::update(double dt) {
   Scene *scene = sceneService_.activeScene();
-  if (!scene) {
+  if (!scene || !inputState_) {
     return;
   }
 
@@ -19,12 +32,11 @@ void ScriptSystem::update(double dt) {
       continue;
     }
 
-    const Entity entity{entityHandle, &registry};
     if (!scriptComponent.started) {
       scriptComponent.started = true;
-      scriptComponent.behaviour->onStart(entity, inputSystem_);
+      scriptComponent.behaviour->onStart(*inputState_);
     }
-    scriptComponent.behaviour->onUpdate(entity, dt, inputSystem_);
+    scriptComponent.behaviour->onUpdate(dt, *inputState_);
   }
 }
 

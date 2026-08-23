@@ -34,7 +34,7 @@ TEST(SceneTest, DestroyEntityInvalidatesIt) {
   Eden::Scene scene;
   auto entity = scene.createEntity();
 
-  scene.destroyEntity(entity);
+  scene.destroyEntity(&entity);
 
   EXPECT_FALSE(entity.valid());
 }

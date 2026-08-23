@@ -6,3 +6,4 @@
 #include "Eden/Services/SceneService/SceneServiceEvents.hpp"
 // Systems
 #include "Eden/Systems/CommonSystemEvents.hpp"
+#include "Eden/Systems/InputSystem/InputSystemEvents.hpp"
