@@ -12,9 +12,9 @@
 /// plus a forward vector derived from yaw/pitch.
 class FreeFlyCamera : public Eden::ScriptBehaviour {
 public:
-  void onStart(Eden::Entity, Eden::InputState &input) override { input.setMouseCaptured(true); }
+  void onStart(Eden::InputState &input) override { input.setMouseCaptured(true); }
 
-  void onUpdate(Eden::Entity entity, double dt, Eden::InputState &input) override {
+  void onUpdate(double dt, Eden::InputState &input) override {
     if (input.isKeyPressed(Eden::Key::Escape)) {
       input.setMouseCaptured(!input.mouseCaptured());
     }
@@ -52,7 +52,7 @@ public:
       movement -= worldUp;
     }
 
-    auto &camera = entity.getComponent<Eden::Camera>();
+    auto &camera = entity().getComponent<Eden::Camera>();
     if (glm::length(movement) > 0.0f) {
       const float speed = input.isKeyDown(Eden::Key::LeftShift) ? kFastSpeed : kSpeed;
       camera.position += glm::normalize(movement) * speed * static_cast<float>(dt);

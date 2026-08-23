@@ -13,8 +13,8 @@ namespace {
 
 class RecordingScript : public Eden::ScriptBehaviour {
 public:
-  void onStart(Eden::Entity, Eden::InputState &) override { ++startCount; }
-  void onUpdate(Eden::Entity, double dt, Eden::InputState &) override {
+  void onStart(Eden::InputState &) override { ++startCount; }
+  void onUpdate(double dt, Eden::InputState &) override {
     ++updateCount;
     lastDt = dt;
   }
@@ -26,8 +26,8 @@ public:
 
 class MoveScript : public Eden::ScriptBehaviour {
 public:
-  void onUpdate(Eden::Entity entity, double dt, Eden::InputState &) override {
-    entity.getComponent<Eden::Transform>().position.x += static_cast<float>(dt);
+  void onUpdate(double dt, Eden::InputState &) override {
+    entity().getComponent<Eden::Transform>().position.x += static_cast<float>(dt);
   }
 };
 
@@ -41,7 +41,7 @@ TEST_F(ScriptSystemTest, OnStartIsCalledExactlyOnce) {
   auto entity = scenePtr->createEntity();
   auto script = std::make_unique<RecordingScript>();
   RecordingScript *scriptPtr = script.get();
-  entity.addComponent<Eden::ScriptComponent>(Eden::ScriptComponent{.behaviour = std::move(script)});
+  entity.addComponent<Eden::ScriptComponent>(entity, *scenePtr, std::move(script));
   sceneService.loadScene(std::move(scenePtr));
 
   Eden::ScriptSystem scriptSystem{sceneService};
@@ -70,7 +70,7 @@ TEST_F(ScriptSystemTest, OnUpdateReceivesTheFrameDt) {
   auto entity = scenePtr->createEntity();
   auto script = std::make_unique<RecordingScript>();
   RecordingScript *scriptPtr = script.get();
-  entity.addComponent<Eden::ScriptComponent>(Eden::ScriptComponent{.behaviour = std::move(script)});
+  entity.addComponent<Eden::ScriptComponent>(entity, *scenePtr, std::move(script));
   sceneService.loadScene(std::move(scenePtr));
 
   Eden::ScriptSystem scriptSystem{sceneService};
@@ -93,7 +93,7 @@ TEST_F(ScriptSystemTest, EntityWithNullBehaviourIsSkipped) {
 
   auto scenePtr = std::make_unique<Eden::Scene>();
   auto entity = scenePtr->createEntity();
-  entity.addComponent<Eden::ScriptComponent>();
+  entity.addComponent<Eden::ScriptComponent>(entity, *scenePtr);
   sceneService.loadScene(std::move(scenePtr));
 
   Eden::ScriptSystem scriptSystem{sceneService};
@@ -116,7 +116,7 @@ TEST_F(ScriptSystemTest, ScriptCanMutateItsOwnComponents) {
   auto scenePtr = std::make_unique<Eden::Scene>();
   auto entity = scenePtr->createEntity();
   entity.addComponent<Eden::Transform>();
-  entity.addComponent<Eden::ScriptComponent>(Eden::ScriptComponent{.behaviour = std::make_unique<MoveScript>()});
+  entity.addComponent<Eden::ScriptComponent>(entity, *scenePtr, std::make_unique<MoveScript>());
   sceneService.loadScene(std::move(scenePtr));
 
   Eden::ScriptSystem scriptSystem{sceneService};
