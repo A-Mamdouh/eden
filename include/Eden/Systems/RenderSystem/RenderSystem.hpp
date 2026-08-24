@@ -36,7 +36,8 @@ namespace Eden::Systems {
 /// Owns the SDL window and the active Renderer backend; polls window/OS
 /// events and drives one Renderer::renderFrame() per update(), built from
 /// the active Scene's Renderable/Model entities (each paired with a
-/// WorldTransform). Subscribes to Events::ConfigUpdatedEvent so a later
+/// WorldTransform) plus any Light/WorldTransform entities for PBR-shaded
+/// draws. Subscribes to Events::ConfigUpdatedEvent so a later
 /// ConfigService::update() call can change anything in RenderConfig --
 /// window chrome, screen mode/resolution, backend, or graphics settings --
 /// without restarting the engine; see onConfigUpdated().
@@ -74,7 +75,7 @@ class RenderSystem : public ISystem {
   void destroyTexture(Rendering::TextureHandle handle);
 
   /// Stores `desc`; a Renderable referencing the returned handle resolves
-  /// it into a DrawCommand's texture/tint/useVertexColor each frame.
+  /// it into a DrawCommand's shading fields each frame.
   Rendering::MaterialHandle createMaterial(const Rendering::Material &desc);
   /// @param handle Handle previously returned by createMaterial(); a
   ///        stale or already-destroyed handle silently no-ops.
@@ -121,9 +122,11 @@ class RenderSystem : public ISystem {
   void onConfigUpdated(const Events::ConfigUpdatedEvent &event);
 
   /// Walks the active scene's Renderable+WorldTransform and
-  /// Model+WorldTransform entities into a RenderFrame. @return A frame
-  /// with just the clear color and no draw commands if there's no active
-  /// scene.
+  /// Model+WorldTransform entities into a RenderFrame's draw commands, and
+  /// its Light+WorldTransform entities (capped at Rendering::kMaxLights,
+  /// extras dropped with a warning) into the frame's light list. @return A
+  /// frame with just the clear color and no draw commands/lights if
+  /// there's no active scene.
   Rendering::RenderFrame buildFrameFromScene() const;
   /// @param scene Scene to resolve the entity set via setActiveCamera()
   ///        against.
@@ -136,8 +139,8 @@ class RenderSystem : public ISystem {
   /// @return The live Material for `handle`, or nullptr if it's invalid,
   ///         out of range, destroyed, or from a reused (stale) slot.
   const Rendering::Material *resolveMaterial(Rendering::MaterialHandle handle) const;
-  /// Resolves `material` into tint/useVertexColor/texture (Material's
-  /// defaults if invalid/destroyed), then applies `tintOverride` if
+  /// Resolves `material` into its shading fields (Material's defaults if
+  /// invalid/destroyed), then applies `tintOverride` if
   /// present. Shared by the Renderable and Model draw-building loops in
   /// buildFrameFromScene().
   Rendering::DrawCommand buildDrawCommand(Rendering::MeshHandle mesh, Rendering::MaterialHandle material,

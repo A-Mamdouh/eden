@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -31,14 +32,74 @@ constexpr std::array<const char *, 1> kValidationLayers = {
 
 /// Upper bound on live textures at once; sized generously for a demo/asset
 /// scene, not meant to scale to a large open-world texture budget. Fixed
-/// so descriptorPool_ can be allocated once and never resized.
-constexpr std::uint32_t kMaxTextures = 256;
+/// so descriptorPool_ can be allocated once and never resized. Each PBR
+/// material can now reference up to 3 textures (baseColor/
+/// metallicRoughness/emissive) instead of 1, hence the higher cap than
+/// before.
+constexpr std::uint32_t kMaxTextures = 512;
 
+/// Mirrors RenderFrame's per-draw shading fields exactly (see
+/// RendererTypes.hpp's DrawCommand), pushed to the GPU once per draw call.
+/// Every field is a mat4, a full vec4, or a scalar -- never a bare vec3 --
+/// so there's no std430 padding to reason about; verified below.
 struct alignas(16) PushConstants {
-  Mat4 mvp{Mat4(1.0f)};
-  Vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
+  Mat4 model{Mat4(1.0f)};
+  Vec4 baseColorFactor{1.0f, 1.0f, 1.0f, 1.0f};
+  float metallicFactor{1.0f};
+  float roughnessFactor{1.0f};
   std::int32_t useVertexColor{0};
+  std::int32_t shadingModel{0};
+  Vec4 emissiveFactor{0.0f, 0.0f, 0.0f, 0.0f};
 };
+static_assert(offsetof(PushConstants, baseColorFactor) == 64);
+static_assert(offsetof(PushConstants, emissiveFactor) == 96);
+static_assert(sizeof(PushConstants) == 112,
+              "must stay <= 128 bytes, Vulkan's guaranteed minimum maxPushConstantsSize");
+
+/// One light's worth of GPU-side data; mirrors the `Light` struct in
+/// mesh.vert/mesh.frag exactly. std140 in a UBO array requires each
+/// element's size be a multiple of vec4's 16-byte alignment, which 3
+/// vec4s trivially satisfies.
+struct alignas(16) GpuLight {
+  /// xyz = world-space position (Point) or travel direction (Directional);
+  /// w = 0 for Directional, 1 for Point (mirrored in LightType's order).
+  Vec4 positionOrDirection{0.0f, 0.0f, 0.0f, 0.0f};
+  /// rgb = color, a = intensity.
+  Vec4 colorIntensity{1.0f, 1.0f, 1.0f, 1.0f};
+  /// x = range (Point only, 0 = no cutoff); yzw reserved (e.g. future
+  /// spot-light cone angles).
+  Vec4 params{0.0f, 0.0f, 0.0f, 0.0f};
+};
+static_assert(sizeof(GpuLight) == 48);
+
+/// Per-frame camera + lighting data, bound once at descriptor set 0 rather
+/// than per draw (unlike PushConstants) -- far too large for a push
+/// constant range, and shared by every draw in the frame regardless.
+/// Layout is std140-safe by the same "no bare vec3" rule as PushConstants;
+/// every offset below is independently verified by static_assert so a
+/// glm/compiler layout surprise fails to compile rather than corrupting
+/// the GPU-side read silently.
+struct alignas(16) FrameUBO {
+  Mat4 view{1.0f};
+  Mat4 proj{1.0f};
+  Vec4 cameraPosition{0.0f, 0.0f, 0.0f, 0.0f};
+  Vec4 ambientColor{0.0f, 0.0f, 0.0f, 0.0f};
+  /// Only .x is meaningful; the extra 3 ints exist purely to occupy the
+  /// same 16 bytes GLSL's ivec4 does, since std140 rounds a lone int up to
+  /// 16-byte alignment anyway -- packing it this way keeps the C++ struct
+  /// honest about where the padding actually goes rather than relying on
+  /// an implicit compiler-inserted gap.
+  std::int32_t lightCount{0};
+  std::int32_t _pad0{0};
+  std::int32_t _pad1{0};
+  std::int32_t _pad2{0};
+  std::array<GpuLight, kMaxLights> lights{};
+};
+static_assert(offsetof(FrameUBO, cameraPosition) == 128);
+static_assert(offsetof(FrameUBO, ambientColor) == 144);
+static_assert(offsetof(FrameUBO, lightCount) == 160);
+static_assert(offsetof(FrameUBO, lights) == 176);
+static_assert(sizeof(FrameUBO) == 176 + 48 * kMaxLights);
 
 struct QueueFamilyIndices {
   std::optional<std::uint32_t> graphicsFamily{};
@@ -266,6 +327,21 @@ VulkanRenderer::~VulkanRenderer() {
     device_.destroyDescriptorSetLayout(descriptorSetLayout_);
   }
 
+  // Not swapchain-sized (see the members' own comment), so torn down here
+  // alongside the rest rather than in cleanupSwapchain().
+  if (frameDescriptorPool_) {
+    device_.destroyDescriptorPool(frameDescriptorPool_);
+  }
+  if (frameDescriptorSetLayout_) {
+    device_.destroyDescriptorSetLayout(frameDescriptorSetLayout_);
+  }
+  if (frameUniformBuffer_) {
+    device_.destroyBuffer(frameUniformBuffer_);
+  }
+  if (frameUniformBufferMemory_) {
+    device_.freeMemory(frameUniformBufferMemory_);
+  }
+
   if (inFlightFence_) {
     device_.destroyFence(inFlightFence_);
   }
@@ -336,6 +412,10 @@ void VulkanRenderer::initVulkan() {
   createTextureSampler();
   createDescriptorPool();
   createDefaultTexture();
+  createFrameDescriptorSetLayout();
+  createFrameUniformBuffer();
+  createFrameDescriptorPool();
+  createFrameDescriptorSet();
   createGraphicsPipeline();
   createFramebuffers();
   allocateCommandBuffers();
@@ -786,6 +866,84 @@ void VulkanRenderer::createDefaultTexture() {
   defaultTexture_ = createTexture(desc);
 }
 
+void VulkanRenderer::createFrameDescriptorSetLayout() {
+  vk::DescriptorSetLayoutBinding uboBinding{};
+  uboBinding.binding = 0;
+  uboBinding.descriptorType = vk::DescriptorType::eUniformBuffer;
+  uboBinding.descriptorCount = 1;
+  uboBinding.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+
+  vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+  layoutInfo.bindingCount = 1;
+  layoutInfo.pBindings = &uboBinding;
+
+  frameDescriptorSetLayout_ = device_.createDescriptorSetLayout(layoutInfo);
+}
+
+void VulkanRenderer::createFrameUniformBuffer() {
+  std::tie(frameUniformBuffer_, frameUniformBufferMemory_) =
+      createBuffer(sizeof(FrameUBO), vk::BufferUsageFlagBits::eUniformBuffer);
+}
+
+void VulkanRenderer::createFrameDescriptorPool() {
+  vk::DescriptorPoolSize poolSize{};
+  poolSize.type = vk::DescriptorType::eUniformBuffer;
+  poolSize.descriptorCount = 1;
+
+  vk::DescriptorPoolCreateInfo poolInfo{};
+  poolInfo.poolSizeCount = 1;
+  poolInfo.pPoolSizes = &poolSize;
+  poolInfo.maxSets = 1;
+
+  frameDescriptorPool_ = device_.createDescriptorPool(poolInfo);
+}
+
+void VulkanRenderer::createFrameDescriptorSet() {
+  vk::DescriptorSetAllocateInfo allocInfo{};
+  allocInfo.descriptorPool = frameDescriptorPool_;
+  allocInfo.descriptorSetCount = 1;
+  allocInfo.pSetLayouts = &frameDescriptorSetLayout_;
+
+  frameDescriptorSet_ = device_.allocateDescriptorSets(allocInfo).front();
+
+  vk::DescriptorBufferInfo bufferInfo{};
+  bufferInfo.buffer = frameUniformBuffer_;
+  bufferInfo.offset = 0;
+  bufferInfo.range = sizeof(FrameUBO);
+
+  vk::WriteDescriptorSet write{};
+  write.dstSet = frameDescriptorSet_;
+  write.dstBinding = 0;
+  write.dstArrayElement = 0;
+  write.descriptorType = vk::DescriptorType::eUniformBuffer;
+  write.descriptorCount = 1;
+  write.pBufferInfo = &bufferInfo;
+
+  device_.updateDescriptorSets(write, {});
+}
+
+void VulkanRenderer::updateFrameUniformBuffer(const RenderFrame &frame) const {
+  FrameUBO ubo{};
+  ubo.view = frame.camera.view;
+  ubo.proj = frame.camera.projection;
+  ubo.cameraPosition = Vec4{frame.camera.position, 0.0f};
+  ubo.ambientColor = Vec4{frame.ambientColor.r, frame.ambientColor.g, frame.ambientColor.b, frame.ambientColor.a};
+
+  const std::size_t lightCount = std::min(frame.lights.size(), kMaxLights);
+  ubo.lightCount = static_cast<std::int32_t>(lightCount);
+  for (std::size_t i = 0; i < lightCount; ++i) {
+    const LightDesc &light = frame.lights[i];
+    GpuLight &gpuLight = ubo.lights[i];
+    gpuLight.positionOrDirection = light.type == LightType::Point
+                                        ? Vec4{light.position, 1.0f}
+                                        : Vec4{light.direction, 0.0f};
+    gpuLight.colorIntensity = Vec4{light.color, light.intensity};
+    gpuLight.params = Vec4{light.range, 0.0f, 0.0f, 0.0f};
+  }
+
+  uploadToBuffer(frameUniformBufferMemory_, &ubo, sizeof(ubo));
+}
+
 std::vector<std::uint32_t> VulkanRenderer::loadShaderBinary(const std::string &filename) const {
   const std::filesystem::path fullPath = std::filesystem::path(EDEN_SHADER_DIR) / filename;
 
@@ -858,7 +1016,7 @@ void VulkanRenderer::createGraphicsPipeline() {
   bindingDescription.stride = sizeof(Vertex);
   bindingDescription.inputRate = vk::VertexInputRate::eVertex;
 
-  vk::VertexInputAttributeDescription attributeDescriptions[3]{};
+  vk::VertexInputAttributeDescription attributeDescriptions[4]{};
   attributeDescriptions[0].binding = 0;
   attributeDescriptions[0].location = 0;
   attributeDescriptions[0].format = vk::Format::eR32G32B32Sfloat;
@@ -867,17 +1025,22 @@ void VulkanRenderer::createGraphicsPipeline() {
   attributeDescriptions[1].binding = 0;
   attributeDescriptions[1].location = 1;
   attributeDescriptions[1].format = vk::Format::eR32G32B32Sfloat;
-  attributeDescriptions[1].offset = offsetof(Vertex, color);
+  attributeDescriptions[1].offset = offsetof(Vertex, normal);
 
   attributeDescriptions[2].binding = 0;
   attributeDescriptions[2].location = 2;
-  attributeDescriptions[2].format = vk::Format::eR32G32Sfloat;
-  attributeDescriptions[2].offset = offsetof(Vertex, uv);
+  attributeDescriptions[2].format = vk::Format::eR32G32B32Sfloat;
+  attributeDescriptions[2].offset = offsetof(Vertex, color);
+
+  attributeDescriptions[3].binding = 0;
+  attributeDescriptions[3].location = 3;
+  attributeDescriptions[3].format = vk::Format::eR32G32Sfloat;
+  attributeDescriptions[3].offset = offsetof(Vertex, uv);
 
   vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
   vertexInputInfo.vertexBindingDescriptionCount = 1;
   vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-  vertexInputInfo.vertexAttributeDescriptionCount = 3;
+  vertexInputInfo.vertexAttributeDescriptionCount = 4;
   vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions;
 
   vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
@@ -925,13 +1088,20 @@ void VulkanRenderer::createGraphicsPipeline() {
   dynamicState.pDynamicStates = dynamicStates;
 
   vk::PushConstantRange pushConstantRange{};
-  pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eVertex;
+  pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
   pushConstantRange.offset = 0;
   pushConstantRange.size = sizeof(PushConstants);
 
+  // Set 0 is the per-frame camera/lights UBO; sets 1-3 are the material's
+  // baseColor/metallicRoughness/emissive textures -- three occurrences of
+  // the same one-binding sampler layout, distinguished only by set index
+  // (see createDescriptorSetLayout()'s comment).
+  const std::array<vk::DescriptorSetLayout, 4> setLayouts = {
+      frameDescriptorSetLayout_, descriptorSetLayout_, descriptorSetLayout_, descriptorSetLayout_};
+
   vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
-  pipelineLayoutInfo.setLayoutCount = 1;
-  pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout_;
+  pipelineLayoutInfo.setLayoutCount = static_cast<std::uint32_t>(setLayouts.size());
+  pipelineLayoutInfo.pSetLayouts = setLayouts.data();
   pipelineLayoutInfo.pushConstantRangeCount = 1;
   pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
@@ -1497,7 +1667,9 @@ void VulkanRenderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, std::u
     scissor.extent = swapchainExtent_;
     commandBuffer.setScissor(0, scissor);
 
-    const Mat4 viewProjection = frame.camera.projection * frame.camera.view;
+    updateFrameUniformBuffer(frame);
+    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout_, 0,
+                                     frameDescriptorSet_, {});
 
     for (const auto &draw : frame.commands) {
       const GpuMesh *mesh = findMesh(draw.mesh);
@@ -1506,20 +1678,30 @@ void VulkanRenderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, std::u
       }
 
       PushConstants pushConstants{};
-      pushConstants.mvp = viewProjection * draw.transform;
-      pushConstants.color = Vec4{draw.tint.r, draw.tint.g, draw.tint.b, draw.tint.a};
+      pushConstants.model = draw.transform;
+      pushConstants.baseColorFactor =
+          Vec4{draw.baseColorFactor.r, draw.baseColorFactor.g, draw.baseColorFactor.b, draw.baseColorFactor.a};
+      pushConstants.metallicFactor = draw.metallicFactor;
+      pushConstants.roughnessFactor = draw.roughnessFactor;
       pushConstants.useVertexColor = draw.useVertexColor ? 1 : 0;
+      pushConstants.shadingModel = static_cast<std::int32_t>(draw.shadingModel);
+      pushConstants.emissiveFactor = Vec4{draw.emissiveFactor, 0.0f};
 
-      commandBuffer.pushConstants(pipelineLayout_, vk::ShaderStageFlagBits::eVertex, 0,
+      commandBuffer.pushConstants(pipelineLayout_,
+                                  vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0,
                                   sizeof(PushConstants), &pushConstants);
 
-      const GpuTexture *texture = findTexture(draw.texture);
-      if (!texture) {
-        texture = findTexture(defaultTexture_);
-      }
-      if (texture) {
-        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout_, 0,
-                                         texture->descriptorSet, {});
+      auto resolveOrDefault = [this](TextureHandle handle) -> const GpuTexture * {
+        const GpuTexture *texture = findTexture(handle);
+        return texture ? texture : findTexture(defaultTexture_);
+      };
+      const GpuTexture *baseColor = resolveOrDefault(draw.baseColorTexture);
+      const GpuTexture *metallicRoughness = resolveOrDefault(draw.metallicRoughnessTexture);
+      const GpuTexture *emissive = resolveOrDefault(draw.emissiveTexture);
+      if (baseColor && metallicRoughness && emissive) {
+        const std::array<vk::DescriptorSet, 3> materialSets = {
+            baseColor->descriptorSet, metallicRoughness->descriptorSet, emissive->descriptorSet};
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout_, 1, materialSets, {});
       }
 
       vk::DeviceSize offsets[] = {0};

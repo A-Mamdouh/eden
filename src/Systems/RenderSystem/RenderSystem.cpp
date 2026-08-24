@@ -277,13 +277,19 @@ DrawCommand RenderSystem::buildDrawCommand(MeshHandle mesh, MaterialHandle mater
   draw.transform = transform;
 
   if (const Material *resolvedMaterial = resolveMaterial(material)) {
-    draw.tint = resolvedMaterial->tint;
+    draw.shadingModel = resolvedMaterial->shadingModel;
+    draw.baseColorFactor = resolvedMaterial->baseColorFactor;
     draw.useVertexColor = resolvedMaterial->useVertexColor;
-    draw.texture = resolvedMaterial->texture;
+    draw.baseColorTexture = resolvedMaterial->baseColorTexture;
+    draw.metallicRoughnessTexture = resolvedMaterial->metallicRoughnessTexture;
+    draw.metallicFactor = resolvedMaterial->metallicFactor;
+    draw.roughnessFactor = resolvedMaterial->roughnessFactor;
+    draw.emissiveTexture = resolvedMaterial->emissiveTexture;
+    draw.emissiveFactor = resolvedMaterial->emissiveFactor;
   }
 
   if (tintOverride) {
-    draw.tint = tintOverride->tint;
+    draw.baseColorFactor = tintOverride->tint;
     draw.useVertexColor = false;
   }
 
@@ -298,14 +304,14 @@ CameraDesc RenderSystem::resolveCamera(Scene &scene) const {
   auto &registry = scene.getRegistry();
   if (registry.valid(activeCamera_) && registry.all_of<Camera>(activeCamera_)) {
     const auto &camera = registry.get<Camera>(activeCamera_);
-    return CameraDesc{camera.viewMatrix(), camera.projectionMatrix(aspect)};
+    return CameraDesc{camera.viewMatrix(), camera.projectionMatrix(aspect), camera.position};
   }
 
   // No camera set (or it doesn't resolve in this scene): fall back to an
   // aspect-corrected orthographic projection (identity view) instead of a
   // bare identity projection, so scenes authored without a camera still
   // render undistorted and fully in view regardless of window aspect ratio.
-  return CameraDesc{Mat4{1.0f}, glm::ortho(-aspect, aspect, -1.0f, 1.0f, -1.0f, 1.0f)};
+  return CameraDesc{Mat4{1.0f}, glm::ortho(-aspect, aspect, -1.0f, 1.0f, -1.0f, 1.0f), Vec3{0.0f}};
 }
 
 RenderFrame RenderSystem::buildFrameFromScene() const {
@@ -344,6 +350,24 @@ RenderFrame RenderSystem::buildFrameFromScene() const {
       }
       frame.commands.push_back(buildDrawCommand(part.mesh, part.material, partTransform, tintOverride));
     }
+  }
+
+  for (const auto entity : registry.view<Light, WorldTransform>()) {
+    if (frame.lights.size() >= kMaxLights) {
+      spdlog::warn("Scene has more than {} lights; extras are ignored this frame", kMaxLights);
+      break;
+    }
+    const auto &light = registry.get<Light>(entity);
+    const Mat4 &worldMatrix = registry.get<WorldTransform>(entity).matrix;
+
+    LightDesc desc{};
+    desc.type = light.type;
+    desc.color = light.color;
+    desc.intensity = light.intensity;
+    desc.range = light.range;
+    desc.position = Vec3{worldMatrix[3]};
+    desc.direction = glm::normalize(Vec3{worldMatrix * Vec4{0.0f, 0.0f, -1.0f, 0.0f}});
+    frame.lights.push_back(desc);
   }
 
   return frame;

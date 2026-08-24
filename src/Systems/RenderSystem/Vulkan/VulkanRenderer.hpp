@@ -113,8 +113,10 @@ private:
   /// attachment when sampleCount() > 1.
   void createRenderPass();
   /// Creates descriptorSetLayout_: one combined-image-sampler binding,
-  /// fragment stage, matching `layout(binding = 0) uniform sampler2D` in
-  /// mesh.frag.
+  /// fragment stage, matching `layout(set = N, binding = 0) uniform
+  /// sampler2D` in mesh.frag -- reused at three different pipeline-layout
+  /// set indices (baseColor/metallicRoughness/emissive), see
+  /// createGraphicsPipeline().
   void createDescriptorSetLayout();
   /// Creates textureSampler_: linear filtering, repeat addressing --
   /// reasonable defaults for glTF textures, not currently configurable
@@ -125,8 +127,35 @@ private:
   void createDescriptorPool();
   /// Uploads a 1x1 opaque white texture and stores it as
   /// defaultTexture_, so draws with no texture set still go through the
-  /// texture-sampling path in the fragment shader.
+  /// texture-sampling path in the fragment shader. Reused as the default
+  /// for all three material texture roles (baseColor/metallicRoughness/
+  /// emissive): `sampled * factor` is multiplicative-identity-safe for
+  /// each of them, so one shared white texture needs no per-role variant.
   void createDefaultTexture();
+  /// Creates frameDescriptorSetLayout_: one uniform-buffer binding, both
+  /// vertex and fragment stages (view/proj feed the former, everything
+  /// else -- camera position, ambient, lights -- feeds the latter),
+  /// matching `layout(set = 0, binding = 0) uniform FrameUBO` in both
+  /// mesh.vert and mesh.frag.
+  void createFrameDescriptorSetLayout();
+  /// Allocates frameUniformBuffer_/frameUniformBufferMemory_, sized for
+  /// one FrameUBO; host-visible/coherent like every other buffer this
+  /// renderer creates (see createBuffer()). Contents are (re)written every
+  /// frame by updateFrameUniformBuffer(), never resized.
+  void createFrameUniformBuffer();
+  /// Creates frameDescriptorPool_, sized for exactly the one set
+  /// frameDescriptorSet_ needs.
+  void createFrameDescriptorPool();
+  /// Allocates frameDescriptorSet_ and points it at frameUniformBuffer_
+  /// once; only the buffer's contents change per frame afterward (see
+  /// updateFrameUniformBuffer()), never the descriptor set's binding.
+  void createFrameDescriptorSet();
+  /// Packs `frame`'s camera/ambient/lights into a FrameUBO and uploads it
+  /// to frameUniformBuffer_. Called once per frame, before the draw loop,
+  /// from recordCommandBuffer() -- safe without per-frame-in-flight
+  /// duplication because renderFrame() already waits on inFlightFence_
+  /// (i.e. the previous frame's GPU work is done) before recording begins.
+  void updateFrameUniformBuffer(const RenderFrame &frame) const;
   /// (Re)builds the mesh pipeline from the precompiled
   /// mesh.vert/frag SPIR-V under EDEN_SHADER_DIR. Destroys any
   /// existing pipeline/layout first, so it's safe to call again on
@@ -249,6 +278,18 @@ private:
   // Fixed-size pool (see createDescriptorPool()'s comment); not resized as
   // textures come and go.
   vk::DescriptorPool descriptorPool_{};
+
+  /// Set 0's layout (camera/ambient/lights UBO), the buffer backing it,
+  /// and the one descriptor set bound from it every frame. Created once in
+  /// initVulkan(), destroyed once in the destructor -- not swapchain-sized
+  /// (unlike descriptorSetLayout_'s per-texture sets, this isn't tied to
+  /// swapchain image count or format), so cleanupSwapchain()/
+  /// recreateSwapchain() never touch these.
+  vk::DescriptorSetLayout frameDescriptorSetLayout_{};
+  vk::DescriptorPool frameDescriptorPool_{};
+  vk::DescriptorSet frameDescriptorSet_{};
+  vk::Buffer frameUniformBuffer_{};
+  vk::DeviceMemory frameUniformBufferMemory_{};
 
   vk::PipelineLayout pipelineLayout_{};
   vk::Pipeline graphicsPipeline_{};

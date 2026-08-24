@@ -2,6 +2,7 @@
 
 #include "Eden/Core/Math.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <span>
 #include <vector>
@@ -54,6 +55,10 @@ struct Color {
 struct Vertex {
   /// Object-space position.
   Vec3 position{};
+  /// Object-space normal, expected unit-length. Left zero-initialized
+  /// rather than defaulted to (0,0,1): a mesh that forgot to supply one
+  /// should shade visibly wrong, not plausible-looking.
+  Vec3 normal{0.0f, 0.0f, 0.0f};
   /// Per-vertex color; only used when a DrawCommand sets useVertexColor.
   Color color{};
   /// Texture coordinates; origin top-left, u right, v down.
@@ -88,24 +93,76 @@ struct CameraDesc {
   Mat4 view{1.0f};
   /// Camera-to-clip transform, e.g. built with one of glm's projection helpers.
   Mat4 projection{1.0f};
+  /// World-space camera position; PBR shading's view vector needs this
+  /// directly rather than deriving it back out of `view`.
+  Vec3 position{0.0f};
+};
+
+/// Selects which lighting math a DrawCommand's fragments go through.
+enum class ShadingModel : std::uint8_t {
+  /// texture * (vertex color or baseColorFactor), no lighting at all --
+  /// today's behavior, kept for hand-authored/flat-tinted geometry.
+  Unlit,
+  /// Metallic-roughness Cook-Torrance BRDF, lit by RenderFrame::lights.
+  PBR,
+};
+
+/// Punctual light kind; see Rendering::Components::Light for the
+/// scene-facing component this is collected from.
+enum class LightType : std::uint8_t { Directional, Point };
+
+/// Upper bound on lights collected into one RenderFrame. Bounds
+/// worst-case per-fragment shading cost (a plain loop, no
+/// tiling/clustering), not memory. The Vulkan backend's UBO array and
+/// the shaders' light array size must be kept in sync with this by
+/// hand -- no shared C++/GLSL constant mechanism exists in this codebase.
+inline constexpr std::size_t kMaxLights = 16;
+
+/// One light's worth of shading data, resolved from a
+/// Rendering::Components::Light + WorldTransform pair.
+struct LightDesc {
+  LightType type{LightType::Directional};
+  /// World-space position; meaningless for Directional.
+  Vec3 position{0.0f};
+  /// Normalized world-space direction the light travels; meaningless for Point.
+  Vec3 direction{0.0f, -1.0f, 0.0f};
+  /// Linear color; not gamma-corrected, same convention as Color.
+  Vec3 color{1.0f, 1.0f, 1.0f};
+  /// Radiometric-ish scale, not physically calibrated -- tune by eye.
+  float intensity{1.0f};
+  /// Point only: distance at which attenuation reaches zero. 0 = no cutoff.
+  float range{0.0f};
 };
 
 /// One instance to draw. `useVertexColor` picks between the mesh's own
-/// per-vertex color and `tint`.
+/// per-vertex color and `baseColorFactor`; `shadingModel` picks whether
+/// the rest of the PBR fields have any effect at all.
 struct DrawCommand {
   /// Mesh to draw; a handle failing Renderer-side validation is skipped.
   MeshHandle mesh{};
   /// Model matrix; combined with the frame's camera as projection * view * transform.
   Mat4 transform{1.0f};
-  /// Flat color used in place of per-vertex color when useVertexColor is false.
-  Color tint{1.0f, 1.0f, 1.0f, 1.0f};
-  /// True: use each vertex's own Vertex::color. False: use `tint` for
-  /// the whole mesh.
+
+  ShadingModel shadingModel{ShadingModel::Unlit};
+
+  /// Flat color used in place of per-vertex color when useVertexColor is
+  /// false (Unlit), or the multiplier applied to baseColorTexture (PBR).
+  Color baseColorFactor{1.0f, 1.0f, 1.0f, 1.0f};
+  /// True: use each vertex's own Vertex::color. False: use
+  /// `baseColorFactor` for the whole mesh. PBR draws always have this false.
   bool useVertexColor{true};
   /// Texture to sample; invalid (the default) draws with a backend-owned
   /// 1x1 white texture, so untextured draws still go through the same
-  /// texture * (vertex color or tint) shading path.
-  TextureHandle texture{};
+  /// texture * (vertex color or baseColorFactor) shading path.
+  TextureHandle baseColorTexture{};
+
+  // PBR only; ignored when shadingModel == Unlit.
+  /// Green channel = roughness, blue channel = metallic (glTF convention).
+  TextureHandle metallicRoughnessTexture{};
+  float metallicFactor{1.0f};
+  float roughnessFactor{1.0f};
+  TextureHandle emissiveTexture{};
+  Vec3 emissiveFactor{0.0f, 0.0f, 0.0f};
 };
 
 /// Everything Renderer::renderFrame() needs for one frame. Renderer never
@@ -118,6 +175,12 @@ struct RenderFrame {
   CameraDesc camera{};
   /// Color the backend clears the frame to before drawing commands.
   Color clearColor{0.0f, 0.0f, 0.0f, 1.0f};
+  /// Flat ambient term added to every PBR fragment regardless of light
+  /// visibility -- a placeholder for real image-based ambient lighting,
+  /// which this engine doesn't have yet. rgb = color, a = intensity.
+  Color ambientColor{0.03f, 0.03f, 0.035f, 1.0f};
+  /// Lights affecting this frame's PBR draws, capped at kMaxLights.
+  std::vector<LightDesc> lights{};
   /// Draw commands in submission order; backends may reorder for
   /// efficiency as long as the visual result is equivalent.
   std::vector<DrawCommand> commands{};

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Eden/Core/Math.hpp"
+#include "Eden/Systems/RenderSystem/RendererTypes.hpp"
 
 #include <entt/entt.hpp>
 
@@ -79,6 +80,23 @@ struct Camera {
   Mat4 projectionMatrix(float aspectRatio) const {
     return glm::perspective(glm::radians(fovDegrees), aspectRatio, nearPlane, farPlane);
   }
+};
+
+/// Punctual light, placed via the entity's WorldTransform -- unlike
+/// Camera, a light has no reason to need its own position/orientation
+/// fields when TransformSystem/EntityHierarchy already gives scripts and
+/// parenting for free. RenderSystem reads position/direction out of
+/// WorldTransform::matrix directly (translation column for position, the
+/// local -Z axis for direction), matching glTF's KHR_lights_punctual
+/// convention.
+struct Light {
+  Rendering::LightType type{Rendering::LightType::Directional};
+  /// Linear color; not gamma-corrected, same convention as Color.
+  Vec3 color{1.0f, 1.0f, 1.0f};
+  /// Radiometric-ish scale, not physically calibrated -- tune by eye.
+  float intensity{1.0f};
+  /// Point only: distance at which attenuation reaches zero. 0 = no cutoff.
+  float range{0.0f};
 };
 
 } // namespace Eden::Rendering::Components

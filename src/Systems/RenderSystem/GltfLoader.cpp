@@ -101,11 +101,14 @@ PrimitiveGeometry extractGeometry(const cgltf_primitive &primitive) {
   }
 
   const cgltf_accessor *positions = nullptr;
+  const cgltf_accessor *normals = nullptr;
   const cgltf_accessor *texcoords = nullptr;
   for (cgltf_size i = 0; i < primitive.attributes_count; ++i) {
     const cgltf_attribute &attribute = primitive.attributes[i];
     if (attribute.type == cgltf_attribute_type_position) {
       positions = attribute.data;
+    } else if (attribute.type == cgltf_attribute_type_normal) {
+      normals = attribute.data;
     } else if (attribute.type == cgltf_attribute_type_texcoord && attribute.index == 0) {
       texcoords = attribute.data;
     }
@@ -114,11 +117,21 @@ PrimitiveGeometry extractGeometry(const cgltf_primitive &primitive) {
   if (!positions) {
     throw std::runtime_error("glTF primitive is missing a POSITION attribute");
   }
+  // Every loaded glTF material shades via the PBR path (see the material
+  // loop below), which needs a real normal -- silently substituting a
+  // placeholder would shade the mesh plausibly-but-wrong, so this fails
+  // loudly instead, same contract as the POSITION check above.
+  if (!normals) {
+    throw std::runtime_error("glTF primitive is missing a NORMAL attribute");
+  }
 
   const std::size_t vertexCount = positions->count;
 
   std::vector<float> positionFloats(vertexCount * 3);
   cgltf_accessor_unpack_floats(positions, positionFloats.data(), positionFloats.size());
+
+  std::vector<float> normalFloats(vertexCount * 3);
+  cgltf_accessor_unpack_floats(normals, normalFloats.data(), normalFloats.size());
 
   std::vector<float> texcoordFloats;
   if (texcoords) {
@@ -132,6 +145,7 @@ PrimitiveGeometry extractGeometry(const cgltf_primitive &primitive) {
     Vertex &vertex = geometry.vertices[i];
     vertex.position =
         Vec3{positionFloats[i * 3 + 0], positionFloats[i * 3 + 1], positionFloats[i * 3 + 2]};
+    vertex.normal = Vec3{normalFloats[i * 3 + 0], normalFloats[i * 3 + 1], normalFloats[i * 3 + 2]};
     // glTF meshes shade via material (texture/factors), not per-vertex
     // color; RenderSystem's Material for this primitive sets
     // useVertexColor = false, so this value is never actually sampled.
@@ -174,29 +188,45 @@ Model loadGltfModel(const std::string &path, Systems::RenderSystem &renderSystem
   // One Eden MaterialHandle per cgltf_material.
   std::unordered_map<const cgltf_material *, MaterialHandle> materials;
 
+  // Resolves a cgltf_texture_view to an Eden TextureHandle, decoding and
+  // uploading through `textures` at most once per cgltf_image even when
+  // several material slots (or several materials) reference the same one.
+  // Returns an invalid (default) handle for an unset texture view.
+  auto resolveTexture = [&](const cgltf_texture_view &view) -> TextureHandle {
+    const cgltf_texture *texture = view.texture;
+    if (!texture || !texture->image) {
+      return TextureHandle{};
+    }
+    const cgltf_image *image = texture->image;
+    auto it = textures.find(image);
+    if (it == textures.end()) {
+      std::vector<std::uint8_t> pixelStorage;
+      const TextureDesc desc = decodeImage(*image, basePath, pixelStorage);
+      it = textures.emplace(image, renderSystem.createTexture(desc)).first;
+    }
+    return it->second;
+  };
+
   for (cgltf_size i = 0; i < data->materials_count; ++i) {
     const cgltf_material &gltfMaterial = data->materials[i];
 
     Material material{};
+    material.shadingModel = ShadingModel::PBR;
     material.useVertexColor = false;
 
     if (gltfMaterial.has_pbr_metallic_roughness) {
       const cgltf_pbr_metallic_roughness &pbr = gltfMaterial.pbr_metallic_roughness;
-      material.tint = Color{pbr.base_color_factor[0], pbr.base_color_factor[1],
-                            pbr.base_color_factor[2], pbr.base_color_factor[3]};
-
-      if (const cgltf_texture *texture = pbr.base_color_texture.texture) {
-        if (const cgltf_image *image = texture->image) {
-          auto it = textures.find(image);
-          if (it == textures.end()) {
-            std::vector<std::uint8_t> pixelStorage;
-            const TextureDesc desc = decodeImage(*image, basePath, pixelStorage);
-            it = textures.emplace(image, renderSystem.createTexture(desc)).first;
-          }
-          material.texture = it->second;
-        }
-      }
+      material.baseColorFactor = Color{pbr.base_color_factor[0], pbr.base_color_factor[1],
+                                       pbr.base_color_factor[2], pbr.base_color_factor[3]};
+      material.baseColorTexture = resolveTexture(pbr.base_color_texture);
+      material.metallicFactor = pbr.metallic_factor;
+      material.roughnessFactor = pbr.roughness_factor;
+      material.metallicRoughnessTexture = resolveTexture(pbr.metallic_roughness_texture);
     }
+
+    material.emissiveFactor =
+        Vec3{gltfMaterial.emissive_factor[0], gltfMaterial.emissive_factor[1], gltfMaterial.emissive_factor[2]};
+    material.emissiveTexture = resolveTexture(gltfMaterial.emissive_texture);
 
     materials.emplace(&gltfMaterial, renderSystem.createMaterial(material));
   }
