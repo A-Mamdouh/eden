@@ -106,7 +106,8 @@ class RenderSystem : public ISystem {
   /// and subscribes to Events::ConfigUpdatedEvent.
   void onInit() override;
 
-  /// Creates window_ from renderConfig_.window/display.
+  /// Creates window_ from renderConfig_.window/display, adding Vulkan window
+  /// support only when the selected backend requires it.
   void createWindow();
   /// Destroys the current renderer_ (if any) and constructs the one
   /// renderConfig_.backend currently selects. Used both by onInit() and
@@ -115,8 +116,9 @@ class RenderSystem : public ISystem {
   /// Reacts to a ConfigService::update() call: applies window-chrome and
   /// display changes directly via SDL, routes anti-aliasing/vsync through
   /// renderer_->applySettings(), and falls back to createRenderer() for
-  /// anything that needs it (backend switch, validation layers, or a
-  /// backend reporting ApplyResult::RequiresRecreate).
+  /// anything that needs it (a backend switch recreates both the SDL window
+  /// and renderer; validation-layer changes and a backend reporting
+  /// ApplyResult::RequiresRecreate recreate only the renderer).
   /// @param event Carries the config engine-wide; only its .render slice
   ///        is read.
   void onConfigUpdated(const Events::ConfigUpdatedEvent &event);

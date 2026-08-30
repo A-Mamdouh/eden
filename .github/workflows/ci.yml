@@ -12,8 +12,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Ninja
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Install CMake and Ninja
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
 
       # LunarG's own documented apt-repo method for CI/automation use,
       # https://vulkan.lunarg.com/doc/sdk/latest/linux/getting_started.html --

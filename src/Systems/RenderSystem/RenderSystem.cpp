@@ -51,7 +51,10 @@ void RenderSystem::onInit() {
 }
 
 void RenderSystem::createWindow() {
-  std::uint32_t windowFlags = SDL_WINDOW_VULKAN | SDL_WINDOW_ALLOW_HIGHDPI;
+  std::uint32_t windowFlags = SDL_WINDOW_ALLOW_HIGHDPI;
+  if (renderConfig_.backend == Config::Rendering::RendererBackend::Vulkan) {
+    windowFlags |= SDL_WINDOW_VULKAN;
+  }
   if (renderConfig_.window.resizable) {
     windowFlags |= SDL_WINDOW_RESIZABLE;
   }
@@ -146,11 +149,24 @@ void RenderSystem::onConfigUpdated(const Events::ConfigUpdatedEvent &event) {
     }
   }
 
-  // Backend/validation-layer changes are Vulkan-instance-level -- there's
-  // no interface hook to ask a live Renderer about those, so RenderSystem
-  // always recreates rather than guessing.
-  if (newConfig.backend != oldConfig.backend ||
-      newConfig.enableValidationLayers != oldConfig.enableValidationLayers) {
+  // SDL requires SDL_WINDOW_VULKAN at window creation time, while headless
+  // drivers such as "offscreen" reject that flag. Recreate the window when
+  // changing backend so Null remains usable without Vulkan window support and
+  // a later switch to Vulkan still receives a compatible window.
+  if (newConfig.backend != oldConfig.backend) {
+    renderer_.reset();
+    SDL_DestroyWindow(window_);
+    window_ = nullptr;
+
+    renderConfig_ = newConfig;
+    createWindow();
+    createRenderer();
+    return;
+  }
+
+  // Validation-layer changes are Vulkan-instance-level -- there's no
+  // interface hook to ask a live Renderer about those, so recreate it.
+  if (newConfig.enableValidationLayers != oldConfig.enableValidationLayers) {
     renderConfig_ = newConfig;
     createRenderer();
     return;
