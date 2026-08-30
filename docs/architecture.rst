@@ -206,13 +206,15 @@ active ``Renderer`` instance, pumps SDL events each frame, and walks the
 active Scene's ``Renderable``/``WorldTransform`` and
 ``Model``/``WorldTransform`` entities to build each ``RenderFrame`` --
 ``Renderer`` itself never sees ECS/entt types. It also owns Material
-storage: :cpp:func:`Eden::Engine::createMaterial` stores a ``Material``
-(texture + tint + useVertexColor) and hands back a ``MaterialHandle`` a
-``Renderable`` or ``ModelPart`` references; RenderSystem resolves it into
-a ``DrawCommand``'s texture/tint/useVertexColor each frame. A ``Model``
-entity draws one ``DrawCommand`` per part, each part's transform composed
-as the entity's ``WorldTransform`` times that part's own
-``ModelPart::localTransform``.
+storage: :cpp:func:`Eden::Engine::createMaterial` stores a ``Material`` and
+hands back a ``MaterialHandle`` a ``Renderable`` or ``ModelPart``
+references; RenderSystem resolves it into a ``DrawCommand``'s shading
+fields each frame. A ``Material``'s ``shadingModel`` picks between
+``Unlit`` (flat texture times vertex color or ``baseColorFactor``, no
+lighting) and ``PBR`` (metallic-roughness Cook-Torrance, lit by the
+frame's ``Light`` entities; see below). A ``Model`` entity draws one
+``DrawCommand`` per part, each part's transform composed as the entity's
+``WorldTransform`` times that part's own ``ModelPart::localTransform``.
 
 RenderSystem renders from whichever entity is selected via
 :cpp:func:`Eden::Engine::setActiveCamera` (forwarded to
@@ -230,6 +232,14 @@ is set, or the selected entity doesn't resolve to a live ``Camera`` in
 the active scene, RenderSystem falls back to an aspect-corrected
 orthographic projection (identity view) so camera-less scenes still
 render undistorted regardless of window size.
+
+Unlike ``Camera``, a ``Light`` component has no position/direction fields
+of its own -- RenderSystem collects every ``Light``/``WorldTransform`` pair
+in the scene each frame (up to ``Rendering::kMaxLights``) and reads a
+Directional light's travel direction, or a Point light's position, straight
+out of that entity's ``WorldTransform``, so a light moves/parents for free
+through the same ``Transform``/``EntityHierarchy`` machinery every other
+spatial entity uses.
 
 :cpp:func:`Eden::Engine::loadModel` is the real asset-loading path: it
 parses a glTF/GLB file (via the vendored ``cgltf``/``stb_image``
@@ -368,12 +378,21 @@ demo, not by an automated test.
 Known gaps
 ----------
 
-- The glTF loader supports triangle-list primitives with POSITION +
-  TEXCOORD_0 and a base-color texture/factor -- no skinning/animation,
-  vertex normals, multi-UV materials, or other PBR texture slots
-  (metallic-roughness, normal, emissive, ...) yet. It also reads every
-  node in the file rather than respecting glTF's ``scene``/``scenes``
-  selection, which only matters for multi-scene files (uncommon).
+- The glTF loader supports triangle-list primitives with POSITION,
+  NORMAL, and TEXCOORD_0, and reads the full metallic-roughness material
+  (base color, metallic/roughness, emissive, each factor+texture) -- no
+  skinning/animation, tangents/normal maps, occlusion texture, or multi-UV
+  materials yet. It also reads every node in the file rather than
+  respecting glTF's ``scene``/``scenes`` selection, which only matters for
+  multi-scene files (uncommon).
+- Rendering supports two shading models per ``Material``: flat ``Unlit``
+  (texture times vertex color or a flat tint, no lighting) and metallic-
+  roughness PBR (Cook-Torrance BRDF) lit by any number of directional/point
+  ``Light`` entities, up to a fixed per-frame cap
+  (``Rendering::kMaxLights``). There's no image-based ambient lighting yet
+  -- PBR materials get a single flat ambient constant instead of a real
+  environment/irradiance map -- and no spot lights, shadows, or HDR/
+  tonemapping.
 - A ``Model``'s parts are a flat, rigid list under one entity -- there's
   no way to reference or move an individual part independently (e.g. one
   node of a loaded rig), matching the lack of skinning/animation support
