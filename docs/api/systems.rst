@@ -4,21 +4,21 @@ Systems
 .. doxygenclass:: Eden::ISystem
    :members:
 
-.. doxygenclass:: Eden::ScriptSystem
+.. doxygenclass:: Eden::Systems::ScriptSystem
    :members:
 
-.. doxygenclass:: Eden::InputSystem
+.. doxygenclass:: Eden::Systems::InputSystem
    :members:
 
-.. doxygenenum:: Eden::Key
+.. doxygenenum:: Eden::Input::Key
 
-.. doxygenclass:: Eden::TransformSystem
+.. doxygenclass:: Eden::Systems::TransformSystem
    :members:
 
-.. doxygenclass:: Eden::RenderSystem
+.. doxygenclass:: Eden::Systems::RenderSystem
    :members:
 
-.. doxygenclass:: Eden::Renderer
+.. doxygenclass:: Eden::Rendering::Renderer
    :members:
 
 Renderer types
@@ -29,45 +29,48 @@ Renderer types
 Culling
 -------
 
-.. doxygenstruct:: Eden::AABB
+.. doxygenstruct:: Eden::Rendering::AABB
    :members:
 
-.. doxygenfunction:: Eden::computeBounds
+.. doxygenfunction:: Eden::Rendering::computeBounds
 
-.. doxygenclass:: Eden::Frustum
+.. doxygenclass:: Eden::Rendering::Frustum
    :members:
 
-Renderable component
+Rendering components
 ---------------------
 
-.. doxygenstruct:: Eden::Renderable
+.. doxygenstruct:: Eden::Rendering::Components::Renderable
    :members:
 
-.. doxygenstruct:: Eden::TintOverride
+.. doxygenstruct:: Eden::Rendering::Components::TintOverride
+   :members:
+
+.. doxygenstruct:: Eden::Rendering::Components::Camera
    :members:
 
 Material
 --------
 
-.. doxygenstruct:: Eden::Material
+.. doxygenstruct:: Eden::Rendering::Material
    :members:
 
 Model
 -----
 
-.. doxygenstruct:: Eden::Model
+.. doxygenstruct:: Eden::Rendering::Model
    :members:
 
-.. doxygenstruct:: Eden::ModelPart
+.. doxygenstruct:: Eden::Rendering::ModelPart
    :members:
 
 Script components
 ------------------
 
-.. doxygenclass:: Eden::ScriptBehaviour
+.. doxygenclass:: Eden::Scripting::ScriptBehaviour
    :members:
 
-.. doxygenstruct:: Eden::ScriptComponent
+.. doxygenstruct:: Eden::Scripting::Components::ScriptComponent
    :members:
 
 Vulkan backend
@@ -101,5 +104,5 @@ backend-agnostic rather than a one-implementation abstraction, and to
 let engine logic be unit-tested without a GPU (see ``tests/``). Not
 wired into ``RenderSystem``; tests construct one directly.
 
-.. doxygenclass:: Eden::NullRenderer
+.. doxygenclass:: Eden::Rendering::NullRenderer
    :members:

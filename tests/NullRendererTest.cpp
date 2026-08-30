@@ -6,19 +6,21 @@
 #include <cstdint>
 #include <memory>
 
-TEST(NullRendererTest, CreateMeshReturnsValidHandle) {
-  Eden::NullRenderer renderer;
-  const std::array<Eden::Vertex, 3> vertices{};
+using namespace Eden::Rendering;
 
-  const auto handle = renderer.createMesh(Eden::MeshDesc{vertices});
+TEST(NullRendererTest, CreateMeshReturnsValidHandle) {
+  NullRenderer renderer;
+  const std::array<Vertex, 3> vertices{};
+
+  const auto handle = renderer.createMesh(MeshDesc{vertices});
 
   EXPECT_TRUE(handle.valid());
 }
 
 TEST(NullRendererTest, DestroyMeshThenDestroyAgainIsSafe) {
-  Eden::NullRenderer renderer;
-  const std::array<Eden::Vertex, 3> vertices{};
-  const auto handle = renderer.createMesh(Eden::MeshDesc{vertices});
+  NullRenderer renderer;
+  const std::array<Vertex, 3> vertices{};
+  const auto handle = renderer.createMesh(MeshDesc{vertices});
 
   renderer.destroyMesh(handle);
 
@@ -26,36 +28,36 @@ TEST(NullRendererTest, DestroyMeshThenDestroyAgainIsSafe) {
 }
 
 TEST(NullRendererTest, DestroyingAnInvalidHandleIsSafe) {
-  Eden::NullRenderer renderer;
+  NullRenderer renderer;
 
-  EXPECT_NO_THROW(renderer.destroyMesh(Eden::MeshHandle{}));
+  EXPECT_NO_THROW(renderer.destroyMesh(MeshHandle{}));
 }
 
 TEST(NullRendererTest, HandleGenerationChangesWhenSlotIsReused) {
-  Eden::NullRenderer renderer;
-  const std::array<Eden::Vertex, 3> vertices{};
+  NullRenderer renderer;
+  const std::array<Vertex, 3> vertices{};
 
-  const auto first = renderer.createMesh(Eden::MeshDesc{vertices});
+  const auto first = renderer.createMesh(MeshDesc{vertices});
   renderer.destroyMesh(first);
-  const auto second = renderer.createMesh(Eden::MeshDesc{vertices});
+  const auto second = renderer.createMesh(MeshDesc{vertices});
 
   EXPECT_EQ(first.id, second.id);
   EXPECT_NE(first.generation, second.generation);
 }
 
 TEST(NullRendererTest, CreateTextureReturnsValidHandle) {
-  Eden::NullRenderer renderer;
+  NullRenderer renderer;
   const std::array<std::uint8_t, 4> pixels{255, 255, 255, 255};
 
-  const auto handle = renderer.createTexture(Eden::TextureDesc{1, 1, pixels});
+  const auto handle = renderer.createTexture(TextureDesc{1, 1, pixels});
 
   EXPECT_TRUE(handle.valid());
 }
 
 TEST(NullRendererTest, DestroyTextureThenDestroyAgainIsSafe) {
-  Eden::NullRenderer renderer;
+  NullRenderer renderer;
   const std::array<std::uint8_t, 4> pixels{255, 255, 255, 255};
-  const auto handle = renderer.createTexture(Eden::TextureDesc{1, 1, pixels});
+  const auto handle = renderer.createTexture(TextureDesc{1, 1, pixels});
 
   renderer.destroyTexture(handle);
 
@@ -63,27 +65,27 @@ TEST(NullRendererTest, DestroyTextureThenDestroyAgainIsSafe) {
 }
 
 TEST(NullRendererTest, DestroyingAnInvalidTextureHandleIsSafe) {
-  Eden::NullRenderer renderer;
+  NullRenderer renderer;
 
-  EXPECT_NO_THROW(renderer.destroyTexture(Eden::TextureHandle{}));
+  EXPECT_NO_THROW(renderer.destroyTexture(TextureHandle{}));
 }
 
 TEST(NullRendererTest, TextureHandleGenerationChangesWhenSlotIsReused) {
-  Eden::NullRenderer renderer;
+  NullRenderer renderer;
   const std::array<std::uint8_t, 4> pixels{255, 255, 255, 255};
 
-  const auto first = renderer.createTexture(Eden::TextureDesc{1, 1, pixels});
+  const auto first = renderer.createTexture(TextureDesc{1, 1, pixels});
   renderer.destroyTexture(first);
-  const auto second = renderer.createTexture(Eden::TextureDesc{1, 1, pixels});
+  const auto second = renderer.createTexture(TextureDesc{1, 1, pixels});
 
   EXPECT_EQ(first.id, second.id);
   EXPECT_NE(first.generation, second.generation);
 }
 
 TEST(NullRendererTest, RenderFrameRecordsTheFrame) {
-  Eden::NullRenderer renderer;
-  Eden::RenderFrame frame{};
-  frame.clearColor = Eden::Color{1.0f, 0.0f, 0.0f, 1.0f};
+  NullRenderer renderer;
+  RenderFrame frame{};
+  frame.clearColor = Color{1.0f, 0.0f, 0.0f, 1.0f};
 
   renderer.renderFrame(frame);
 
@@ -92,8 +94,8 @@ TEST(NullRendererTest, RenderFrameRecordsTheFrame) {
 }
 
 TEST(NullRendererTest, FrameCountIncrementsPerCall) {
-  Eden::NullRenderer renderer;
-  Eden::RenderFrame frame{};
+  NullRenderer renderer;
+  RenderFrame frame{};
 
   renderer.renderFrame(frame);
   renderer.renderFrame(frame);
@@ -103,7 +105,7 @@ TEST(NullRendererTest, FrameCountIncrementsPerCall) {
 }
 
 TEST(NullRendererTest, RequestResizeRecordsDimensions) {
-  Eden::NullRenderer renderer;
+  NullRenderer renderer;
 
   renderer.requestResize(800, 600);
 
@@ -112,12 +114,12 @@ TEST(NullRendererTest, RequestResizeRecordsDimensions) {
 }
 
 TEST(NullRendererTest, SatisfiesRendererContractPolymorphically) {
-  std::unique_ptr<Eden::Renderer> renderer = std::make_unique<Eden::NullRenderer>();
-  const std::array<Eden::Vertex, 3> vertices{};
+  std::unique_ptr<Renderer> renderer = std::make_unique<NullRenderer>();
+  const std::array<Vertex, 3> vertices{};
 
-  const auto handle = renderer->createMesh(Eden::MeshDesc{vertices});
+  const auto handle = renderer->createMesh(MeshDesc{vertices});
   EXPECT_TRUE(handle.valid());
 
-  Eden::RenderFrame frame{};
+  RenderFrame frame{};
   EXPECT_NO_THROW(renderer->renderFrame(frame));
 }

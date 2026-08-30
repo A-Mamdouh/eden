@@ -9,13 +9,18 @@
 int main()
 {
     Eden::AppConfig config;
-    config.engine.window.title = "Eden Demo";
+    config.engine.render.window.title = "Eden Demo";
     config.engine.render.enableValidationLayers = true;
-    config.engine.render.targetFrameRate = 144;
+    config.engine.render.display.targetFrameRate = 60;
+    config.engine.render.display.vsync = Eden::Rendering::VsyncMode::On;
+    config.engine.render.display.height = 1080;
+    config.engine.render.display.width = 1920;
+    config.engine.render.display.screenMode = Eden::Config::Rendering::ScreenMode::Windowed;
+    config.engine.render.graphics.antiAliasing = Eden::Rendering::AntiAliasing::MSAA4x;
 
     Eden::Engine engine(config);
     const Demo::DemoMeshes meshes = Demo::createDemoMeshes(engine);
-    Eden::Model signModel = engine.loadModel(std::string(EDEN_DEMO_ASSETS_DIR) + "/quad.gltf");
+    Eden::Rendering::Model signModel = engine.loadModel(std::string(EDEN_DEMO_ASSETS_DIR) + "/quad.gltf");
     engine.loadScene(Demo::buildDemoScene(engine, meshes, std::move(signModel)));
 
     spdlog::info("Demo application initialized; entering run loop");

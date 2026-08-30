@@ -16,7 +16,7 @@
       "name": "Quad",
       "primitives": [
         {
-          "attributes": { "POSITION": 0, "TEXCOORD_0": 1 },
+          "attributes": { "POSITION": 0, "NORMAL": 3, "TEXCOORD_0": 1 },
           "indices": 2,
           "material": 0
         }
@@ -28,7 +28,9 @@
       "name": "CheckerMaterial",
       "pbrMetallicRoughness": {
         "baseColorTexture": { "index": 0 },
-        "baseColorFactor": [1.0, 1.0, 1.0, 1.0]
+        "baseColorFactor": [1.0, 1.0, 1.0, 1.0],
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.8
       }
     }
   ],
@@ -42,12 +44,13 @@
     { "uri": "checker.png" }
   ],
   "buffers": [
-    { "uri": "quad.bin", "byteLength": 92 }
+    { "uri": "quad.bin", "byteLength": 140 }
   ],
   "bufferViews": [
     { "buffer": 0, "byteOffset": 0, "byteLength": 48, "target": 34962 },
     { "buffer": 0, "byteOffset": 48, "byteLength": 32, "target": 34962 },
-    { "buffer": 0, "byteOffset": 80, "byteLength": 12, "target": 34963 }
+    { "buffer": 0, "byteOffset": 80, "byteLength": 12, "target": 34963 },
+    { "buffer": 0, "byteOffset": 92, "byteLength": 48, "target": 34962 }
   ],
   "accessors": [
     {
@@ -69,6 +72,14 @@
       "componentType": 5123,
       "count": 6,
       "type": "SCALAR"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 4,
+      "type": "VEC3",
+      "min": [0.0, 0.0, 1.0],
+      "max": [0.0, 0.0, 1.0]
     }
   ]
 }

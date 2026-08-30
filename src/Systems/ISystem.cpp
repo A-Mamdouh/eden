@@ -5,14 +5,14 @@
 
 namespace Eden {
 
-void ISystem::init(std::weak_ptr<const EventService> eventService) {
+void ISystem::init(std::weak_ptr<Services::EventService> eventService) {
   eventService_ = std::move(eventService);
   getEventService()->publish<Events::SystemStartedEvent>(
       Events::SystemStartedEvent{.systemName = this->getName(), .system = this});
   onInit();
 }
 
-const EventService *ISystem::getEventService() {
+Services::EventService *ISystem::getEventService() {
   const auto es = eventService_.lock();
   if (!es) {
     // TODO: panic

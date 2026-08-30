@@ -1,9 +1,11 @@
 #include "Eden/Systems/RenderSystem/RenderSystem.hpp"
 
+#include "Eden/Services/ConfigService/ConfigServiceEvents.hpp"
 #include "Eden/Services/SceneService/Components.hpp"
 #include "Eden/Services/SceneService/Scene.hpp"
 #include "Eden/Services/SceneService/SceneService.hpp"
 #include "Eden/Systems/RenderSystem/Frustum.hpp"
+#include "Eden/Systems/RenderSystem/NullRenderer.hpp"
 #include "Eden/Systems/RenderSystem/Renderer.hpp"
 #include "Systems/RenderSystem/GltfLoader.hpp"
 #include "Systems/RenderSystem/Vulkan/VulkanRendererFactory.hpp"
@@ -15,40 +17,156 @@
 #include <stdexcept>
 #include <utility>
 
-namespace Eden {
+namespace Eden::Systems {
+using namespace Eden::Rendering;
+using namespace Eden::Rendering::Components;
+using namespace Eden::World;
+using namespace Eden::Services;
 
-RenderSystem::RenderSystem(Config::WindowConfig windowConfig,
-                           Config::RenderConfig renderConfig, SceneService &sceneService)
-    : windowConfig_{std::move(windowConfig)}, renderConfig_{std::move(renderConfig)},
-      sceneService_{sceneService} {}
+RenderSystem::RenderSystem(Config::Rendering::RenderConfig renderConfig, SceneService &sceneService)
+    : renderConfig_{std::move(renderConfig)}, sceneService_{sceneService} {}
 
 RenderSystem::~RenderSystem() { shutdown(); }
 
 void RenderSystem::onInit() {
+  // Without this, Windows treats the process as DPI-unaware and silently
+  // upscales the whole window to match the display's scale factor (e.g. a
+  // requested 1920x1080 window physically renders larger than that on a
+  // 4K display at 150%/200% scaling) -- must be set before SDL_Init. Using
+  // "system" rather than "permonitorv2": RenderSystem doesn't handle a
+  // live per-monitor DPI change (WM_DPICHANGED) if the window is dragged
+  // to a differently-scaled monitor, so per-monitor awareness would
+  // promise more than this actually implements today.
+  SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "system");
+
   if (SDL_Init(SDL_INIT_VIDEO) != 0) {
     throw std::runtime_error(SDL_GetError());
   }
 
-  std::uint32_t windowFlags = SDL_WINDOW_VULKAN;
-  if (windowConfig_.resizable) {
+  createWindow();
+  createRenderer();
+
+  configListener_ = getEventService()->subscribe<Events::ConfigUpdatedEvent>(
+      [this](const Events::ConfigUpdatedEvent &event) { onConfigUpdated(event); });
+}
+
+void RenderSystem::createWindow() {
+  std::uint32_t windowFlags = SDL_WINDOW_VULKAN | SDL_WINDOW_ALLOW_HIGHDPI;
+  if (renderConfig_.window.resizable) {
     windowFlags |= SDL_WINDOW_RESIZABLE;
   }
-  if (windowConfig_.fullscreen) {
+  switch (renderConfig_.display.screenMode) {
+  case Config::Rendering::ScreenMode::Borderless:
     windowFlags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+    break;
+  case Config::Rendering::ScreenMode::Fullscreen:
+    windowFlags |= SDL_WINDOW_FULLSCREEN;
+    break;
+  case Config::Rendering::ScreenMode::Windowed:
+  default:
+    break;
   }
 
-  window_ = SDL_CreateWindow(windowConfig_.title.c_str(), SDL_WINDOWPOS_CENTERED,
-                             SDL_WINDOWPOS_CENTERED, windowConfig_.width,
-                             windowConfig_.height, windowFlags);
+  window_ = SDL_CreateWindow(renderConfig_.window.title.c_str(), SDL_WINDOWPOS_CENTERED,
+                             SDL_WINDOWPOS_CENTERED, static_cast<int>(renderConfig_.display.width),
+                             static_cast<int>(renderConfig_.display.height), windowFlags);
 
   if (!window_) {
     throw std::runtime_error(SDL_GetError());
   }
 
-  windowWidth_ = windowConfig_.width;
-  windowHeight_ = windowConfig_.height;
+  // Read back rather than trust renderConfig_.display.width/height: SDL/the
+  // OS can adjust the actual window size (DPI scaling, work-area clamping),
+  // so this is what's actually true regardless of what was requested.
+  int width = 0;
+  int height = 0;
+  SDL_GetWindowSize(window_, &width, &height);
+  windowWidth_ = width;
+  windowHeight_ = height;
+}
 
-  renderer_ = createVulkanRenderer(window_, renderConfig_.enableValidationLayers);
+void RenderSystem::createRenderer() {
+  renderer_.reset();
+
+  const RenderSettings settings{renderConfig_.graphics.antiAliasing, renderConfig_.display.vsync};
+  switch (renderConfig_.backend) {
+  case Config::Rendering::RendererBackend::Null:
+    renderer_ = std::make_unique<NullRenderer>();
+    break;
+  case Config::Rendering::RendererBackend::Vulkan:
+  default:
+    renderer_ = createVulkanRenderer(window_, renderConfig_.enableValidationLayers, settings);
+    break;
+  }
+}
+
+void RenderSystem::onConfigUpdated(const Events::ConfigUpdatedEvent &event) {
+  const Config::Rendering::RenderConfig &oldConfig = renderConfig_;
+  const Config::Rendering::RenderConfig &newConfig = event.newConfig->engine.render;
+
+  if (newConfig.window.title != oldConfig.window.title) {
+    SDL_SetWindowTitle(window_, newConfig.window.title.c_str());
+  }
+  if (newConfig.window.resizable != oldConfig.window.resizable) {
+    SDL_SetWindowResizable(window_, newConfig.window.resizable ? SDL_TRUE : SDL_FALSE);
+  }
+
+  const bool screenChanged = newConfig.display.screenMode != oldConfig.display.screenMode ||
+                             newConfig.display.width != oldConfig.display.width ||
+                             newConfig.display.height != oldConfig.display.height;
+  if (newConfig.display.screenMode != oldConfig.display.screenMode) {
+    Uint32 flag = 0;
+    switch (newConfig.display.screenMode) {
+    case Config::Rendering::ScreenMode::Borderless:
+      flag = SDL_WINDOW_FULLSCREEN_DESKTOP;
+      break;
+    case Config::Rendering::ScreenMode::Fullscreen:
+      flag = SDL_WINDOW_FULLSCREEN;
+      break;
+    case Config::Rendering::ScreenMode::Windowed:
+    default:
+      flag = 0;
+      break;
+    }
+    SDL_SetWindowFullscreen(window_, flag);
+  }
+  if (newConfig.display.width != oldConfig.display.width ||
+      newConfig.display.height != oldConfig.display.height) {
+    SDL_SetWindowSize(window_, static_cast<int>(newConfig.display.width),
+                      static_cast<int>(newConfig.display.height));
+  }
+  if (screenChanged) {
+    int width = 0;
+    int height = 0;
+    SDL_GetWindowSize(window_, &width, &height);
+    windowWidth_ = width;
+    windowHeight_ = height;
+    if (renderer_) {
+      renderer_->requestResize(static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height));
+    }
+  }
+
+  // Backend/validation-layer changes are Vulkan-instance-level -- there's
+  // no interface hook to ask a live Renderer about those, so RenderSystem
+  // always recreates rather than guessing.
+  if (newConfig.backend != oldConfig.backend ||
+      newConfig.enableValidationLayers != oldConfig.enableValidationLayers) {
+    renderConfig_ = newConfig;
+    createRenderer();
+    return;
+  }
+
+  if (newConfig.graphics.antiAliasing != oldConfig.graphics.antiAliasing ||
+      newConfig.display.vsync != oldConfig.display.vsync) {
+    const RenderSettings settings{newConfig.graphics.antiAliasing, newConfig.display.vsync};
+    if (renderer_ && renderer_->applySettings(settings) == ApplyResult::RequiresRecreate) {
+      renderConfig_ = newConfig;
+      createRenderer();
+      return;
+    }
+  }
+
+  renderConfig_ = newConfig;
 }
 
 MeshHandle RenderSystem::createMesh(const MeshDesc &desc) {
@@ -159,13 +277,19 @@ DrawCommand RenderSystem::buildDrawCommand(MeshHandle mesh, MaterialHandle mater
   draw.transform = transform;
 
   if (const Material *resolvedMaterial = resolveMaterial(material)) {
-    draw.tint = resolvedMaterial->tint;
+    draw.shadingModel = resolvedMaterial->shadingModel;
+    draw.baseColorFactor = resolvedMaterial->baseColorFactor;
     draw.useVertexColor = resolvedMaterial->useVertexColor;
-    draw.texture = resolvedMaterial->texture;
+    draw.baseColorTexture = resolvedMaterial->baseColorTexture;
+    draw.metallicRoughnessTexture = resolvedMaterial->metallicRoughnessTexture;
+    draw.metallicFactor = resolvedMaterial->metallicFactor;
+    draw.roughnessFactor = resolvedMaterial->roughnessFactor;
+    draw.emissiveTexture = resolvedMaterial->emissiveTexture;
+    draw.emissiveFactor = resolvedMaterial->emissiveFactor;
   }
 
   if (tintOverride) {
-    draw.tint = tintOverride->tint;
+    draw.baseColorFactor = tintOverride->tint;
     draw.useVertexColor = false;
   }
 
@@ -180,14 +304,14 @@ CameraDesc RenderSystem::resolveCamera(Scene &scene) const {
   auto &registry = scene.getRegistry();
   if (registry.valid(activeCamera_) && registry.all_of<Camera>(activeCamera_)) {
     const auto &camera = registry.get<Camera>(activeCamera_);
-    return CameraDesc{camera.viewMatrix(), camera.projectionMatrix(aspect)};
+    return CameraDesc{camera.viewMatrix(), camera.projectionMatrix(aspect), camera.position};
   }
 
   // No camera set (or it doesn't resolve in this scene): fall back to an
   // aspect-corrected orthographic projection (identity view) instead of a
   // bare identity projection, so scenes authored without a camera still
   // render undistorted and fully in view regardless of window aspect ratio.
-  return CameraDesc{Mat4{1.0f}, glm::ortho(-aspect, aspect, -1.0f, 1.0f, -1.0f, 1.0f)};
+  return CameraDesc{Mat4{1.0f}, glm::ortho(-aspect, aspect, -1.0f, 1.0f, -1.0f, 1.0f), Vec3{0.0f}};
 }
 
 RenderFrame RenderSystem::buildFrameFromScene() const {
@@ -226,6 +350,24 @@ RenderFrame RenderSystem::buildFrameFromScene() const {
       }
       frame.commands.push_back(buildDrawCommand(part.mesh, part.material, partTransform, tintOverride));
     }
+  }
+
+  for (const auto entity : registry.view<Light, WorldTransform>()) {
+    if (frame.lights.size() >= kMaxLights) {
+      spdlog::warn("Scene has more than {} lights; extras are ignored this frame", kMaxLights);
+      break;
+    }
+    const auto &light = registry.get<Light>(entity);
+    const Mat4 &worldMatrix = registry.get<WorldTransform>(entity).matrix;
+
+    LightDesc desc{};
+    desc.type = light.type;
+    desc.color = light.color;
+    desc.intensity = light.intensity;
+    desc.range = light.range;
+    desc.position = Vec3{worldMatrix[3]};
+    desc.direction = glm::normalize(Vec3{worldMatrix * Vec4{0.0f, 0.0f, -1.0f, 0.0f}});
+    frame.lights.push_back(desc);
   }
 
   return frame;
@@ -272,6 +414,11 @@ void RenderSystem::update(double /*dt*/) {
 }
 
 void RenderSystem::shutdown() {
+  if (configListener_) {
+    getEventService()->unsubscribe<Events::ConfigUpdatedEvent>(*configListener_);
+    configListener_.reset();
+  }
+
   renderer_.reset();
 
   if (window_) {
@@ -282,4 +429,4 @@ void RenderSystem::shutdown() {
   SDL_Quit();
 }
 
-} // namespace Eden
+} // namespace Eden::Systems

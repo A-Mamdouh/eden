@@ -2,9 +2,11 @@
 
 #include "Eden/Systems/ISystem.hpp"
 
-namespace Eden {
-
+namespace Eden::Services {
 class SceneService;
+}
+
+namespace Eden::Systems {
 
 /// Computes each entity's WorldTransform from its Transform and
 /// EntityHierarchy parent chain, every frame. The only system that
@@ -14,7 +16,7 @@ class TransformSystem : public ISystem {
 public:
   /// @param sceneService Queried each update() for the active scene;
   ///        a null active scene is a no-op, not an error.
-  explicit TransformSystem(SceneService &sceneService) : sceneService_{sceneService} {}
+  explicit TransformSystem(Services::SceneService &sceneService) : sceneService_{sceneService} {}
 
   std::string getName() override { return "Transform System"; }
   void update(double dt) override;
@@ -23,7 +25,7 @@ public:
 private:
   void onInit() override {}
 
-  SceneService &sceneService_;
+  Services::SceneService &sceneService_;
 };
 
-} // namespace Eden
+} // namespace Eden::Systems

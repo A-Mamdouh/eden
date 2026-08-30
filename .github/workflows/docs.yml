@@ -47,12 +47,12 @@ jobs:
 
       - run: pip install -r docs/requirements.txt
 
-      # EDEN_BUILD_ENGINE=OFF skips the Vulkan SDK / SDL2 / EnTT dependency
+      # EDEN_BUILD_LIBRARY=OFF skips the Vulkan SDK / SDL2 / EnTT dependency
       # chain entirely -- docs only need to parse header text, not compile
       # the engine, so this job stays fast and independent of engine build
       # health.
       - name: Configure
-        run: cmake -B build -G Ninja -DEDEN_BUILD_ENGINE=OFF -DEDEN_BUILD_DOCS=ON
+        run: cmake -B build -G Ninja -DEDEN_BUILD_LIBRARY=OFF -DEDEN_BUILD_DEMO=OFF -DEDEN_BUILD_TESTS=OFF -DEDEN_BUILD_DOCS=ON
 
       - name: Build docs
         run: cmake --build build --target Sphinx

@@ -1,12 +1,13 @@
 #pragma once
 
 #include "Eden/Core/Math.hpp"
+#include "Eden/Systems/RenderSystem/RendererTypes.hpp"
 
 #include <entt/entt.hpp>
 
 #include <glm/gtc/matrix_transform.hpp>
 
-namespace Eden {
+namespace Eden::World {
 
 /// Local-space transform. Composed into a matrix via localMatrix();
 /// world-space placement is computed separately by TransformSystem,
@@ -46,6 +47,10 @@ struct WorldTransform {
   Mat4 matrix{1.0f};
 };
 
+} // namespace Eden::World
+
+namespace Eden::Rendering::Components {
+
 /// Placement and lens parameters for viewing the scene -- pure data, no
 /// notion of being "the" camera. RenderSystem renders from whichever
 /// entity is selected via RenderSystem::setActiveCamera(); a Camera
@@ -77,4 +82,21 @@ struct Camera {
   }
 };
 
-} // namespace Eden
+/// Punctual light, placed via the entity's WorldTransform -- unlike
+/// Camera, a light has no reason to need its own position/orientation
+/// fields when TransformSystem/EntityHierarchy already gives scripts and
+/// parenting for free. RenderSystem reads position/direction out of
+/// WorldTransform::matrix directly (translation column for position, the
+/// local -Z axis for direction), matching glTF's KHR_lights_punctual
+/// convention.
+struct Light {
+  Rendering::LightType type{Rendering::LightType::Directional};
+  /// Linear color; not gamma-corrected, same convention as Color.
+  Vec3 color{1.0f, 1.0f, 1.0f};
+  /// Radiometric-ish scale, not physically calibrated -- tune by eye.
+  float intensity{1.0f};
+  /// Point only: distance at which attenuation reaches zero. 0 = no cutoff.
+  float range{0.0f};
+};
+
+} // namespace Eden::Rendering::Components

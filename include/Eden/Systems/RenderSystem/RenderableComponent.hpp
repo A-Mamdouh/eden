@@ -3,7 +3,7 @@
 #include "Eden/Systems/RenderSystem/Material.hpp"
 #include "Eden/Systems/RenderSystem/RendererTypes.hpp"
 
-namespace Eden {
+namespace Eden::Rendering::Components {
 
 /// Marks an entity for RenderSystem to draw each frame, using its
 /// WorldTransform (computed by TransformSystem) as the model matrix.
@@ -23,4 +23,4 @@ struct TintOverride {
   Color tint{1.0f, 1.0f, 1.0f, 1.0f};
 };
 
-} // namespace Eden
+} // namespace Eden::Rendering::Components

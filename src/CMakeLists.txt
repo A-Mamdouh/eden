@@ -9,6 +9,7 @@ add_library(Eden STATIC
     Systems/ISystem.cpp
     Systems/TransformSystem.cpp
     Systems/InputSystem/InputSystem.cpp
+    Systems/InputSystem/InputState.cpp
     Systems/ScriptSystem/ScriptSystem.cpp
     Systems/RenderSystem/RenderSystem.cpp
     Systems/RenderSystem/NullRenderer.cpp
@@ -18,12 +19,13 @@ add_library(Eden STATIC
     Systems/RenderSystem/Vulkan/VulkanRenderer.cpp
 )
 
+add_library(Eden::Eden ALIAS Eden)
+
 target_include_directories(
     Eden
     PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/../include
-        ${EDEN_ENGINE_CONFIG_INCLUDE_DIR}
-        ${CMAKE_BINARY_DIR}/_deps/entt-src/src
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${EDEN_ENGINE_CONFIG_INCLUDE_DIR}>
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/../third_party
@@ -44,13 +46,18 @@ target_compile_definitions(
         GLM_FORCE_DEPTH_ZERO_TO_ONE
 )
 
-target_link_libraries(Eden PUBLIC glm::glm)
+target_link_libraries(
+    Eden
+    PUBLIC
+        EnTT::EnTT
+        glm::glm
+)
 
 target_link_libraries(
     Eden
     PRIVATE
         spdlog::spdlog
-        SDL2::SDL2
+        ${EDEN_SDL2_TARGET}
         Vulkan::Vulkan
 )
 

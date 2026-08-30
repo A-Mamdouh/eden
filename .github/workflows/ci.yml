@@ -36,3 +36,21 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+      # Configure Eden through a separate parent project. Reuse the dependency
+      # sources downloaded above so this verifies subproject defaults and the
+      # public link interface without cloning everything a second time.
+      - name: Configure consumer smoke test
+        run: |
+          cmake -S tests/consumer -B build-consumer -G Ninja \
+            -DFETCHCONTENT_FULLY_DISCONNECTED=ON \
+            -DFETCHCONTENT_SOURCE_DIR_SPDLOG="$GITHUB_WORKSPACE/build/_deps/spdlog-src" \
+            -DFETCHCONTENT_SOURCE_DIR_SDL2="$GITHUB_WORKSPACE/build/_deps/sdl2-src" \
+            -DFETCHCONTENT_SOURCE_DIR_ENTT="$GITHUB_WORKSPACE/build/_deps/entt-src" \
+            -DFETCHCONTENT_SOURCE_DIR_GLM="$GITHUB_WORKSPACE/build/_deps/glm-src"
+
+      - name: Build consumer smoke test
+        run: cmake --build build-consumer --target EdenConsumerSmoke
+
+      - name: Run consumer smoke test
+        run: ./build-consumer/EdenConsumerSmoke

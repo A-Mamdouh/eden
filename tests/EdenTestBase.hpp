@@ -15,11 +15,11 @@ namespace EdenTest {
 class EdenTestBase : public ::testing::Test {
 protected:
   void SetUp() override {
-    eventService = std::make_shared<Eden::EventService>();
+    eventService = std::make_shared<Eden::Services::EventService>();
     eventService->init(eventService);
   }
 
-  std::shared_ptr<Eden::EventService> eventService;
+  std::shared_ptr<Eden::Services::EventService> eventService;
 };
 
 } // namespace EdenTest

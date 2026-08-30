@@ -2,11 +2,12 @@
 
 #include "Eden/Core/Math.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <span>
 #include <vector>
 
-namespace Eden {
+namespace Eden::Rendering {
 
 /// Opaque, backend-owned resource id. Tag-templated so e.g. a MeshHandle
 /// can't be passed where a TextureHandle is expected. `generation` lets a
@@ -54,6 +55,10 @@ struct Color {
 struct Vertex {
   /// Object-space position.
   Vec3 position{};
+  /// Object-space normal, expected unit-length. Left zero-initialized
+  /// rather than defaulted to (0,0,1): a mesh that forgot to supply one
+  /// should shade visibly wrong, not plausible-looking.
+  Vec3 normal{0.0f, 0.0f, 0.0f};
   /// Per-vertex color; only used when a DrawCommand sets useVertexColor.
   Color color{};
   /// Texture coordinates; origin top-left, u right, v down.
@@ -88,24 +93,76 @@ struct CameraDesc {
   Mat4 view{1.0f};
   /// Camera-to-clip transform, e.g. built with one of glm's projection helpers.
   Mat4 projection{1.0f};
+  /// World-space camera position; PBR shading's view vector needs this
+  /// directly rather than deriving it back out of `view`.
+  Vec3 position{0.0f};
+};
+
+/// Selects which lighting math a DrawCommand's fragments go through.
+enum class ShadingModel : std::uint8_t {
+  /// texture * (vertex color or baseColorFactor), no lighting at all --
+  /// today's behavior, kept for hand-authored/flat-tinted geometry.
+  Unlit,
+  /// Metallic-roughness Cook-Torrance BRDF, lit by RenderFrame::lights.
+  PBR,
+};
+
+/// Punctual light kind; see Rendering::Components::Light for the
+/// scene-facing component this is collected from.
+enum class LightType : std::uint8_t { Directional, Point };
+
+/// Upper bound on lights collected into one RenderFrame. Bounds
+/// worst-case per-fragment shading cost (a plain loop, no
+/// tiling/clustering), not memory. The Vulkan backend's UBO array and
+/// the shaders' light array size must be kept in sync with this by
+/// hand -- no shared C++/GLSL constant mechanism exists in this codebase.
+inline constexpr std::size_t kMaxLights = 16;
+
+/// One light's worth of shading data, resolved from a
+/// Rendering::Components::Light + WorldTransform pair.
+struct LightDesc {
+  LightType type{LightType::Directional};
+  /// World-space position; meaningless for Directional.
+  Vec3 position{0.0f};
+  /// Normalized world-space direction the light travels; meaningless for Point.
+  Vec3 direction{0.0f, -1.0f, 0.0f};
+  /// Linear color; not gamma-corrected, same convention as Color.
+  Vec3 color{1.0f, 1.0f, 1.0f};
+  /// Radiometric-ish scale, not physically calibrated -- tune by eye.
+  float intensity{1.0f};
+  /// Point only: distance at which attenuation reaches zero. 0 = no cutoff.
+  float range{0.0f};
 };
 
 /// One instance to draw. `useVertexColor` picks between the mesh's own
-/// per-vertex color and `tint`.
+/// per-vertex color and `baseColorFactor`; `shadingModel` picks whether
+/// the rest of the PBR fields have any effect at all.
 struct DrawCommand {
   /// Mesh to draw; a handle failing Renderer-side validation is skipped.
   MeshHandle mesh{};
   /// Model matrix; combined with the frame's camera as projection * view * transform.
   Mat4 transform{1.0f};
-  /// Flat color used in place of per-vertex color when useVertexColor is false.
-  Color tint{1.0f, 1.0f, 1.0f, 1.0f};
-  /// True: use each vertex's own Vertex::color. False: use `tint` for
-  /// the whole mesh.
+
+  ShadingModel shadingModel{ShadingModel::Unlit};
+
+  /// Flat color used in place of per-vertex color when useVertexColor is
+  /// false (Unlit), or the multiplier applied to baseColorTexture (PBR).
+  Color baseColorFactor{1.0f, 1.0f, 1.0f, 1.0f};
+  /// True: use each vertex's own Vertex::color. False: use
+  /// `baseColorFactor` for the whole mesh. PBR draws always have this false.
   bool useVertexColor{true};
   /// Texture to sample; invalid (the default) draws with a backend-owned
   /// 1x1 white texture, so untextured draws still go through the same
-  /// texture * (vertex color or tint) shading path.
-  TextureHandle texture{};
+  /// texture * (vertex color or baseColorFactor) shading path.
+  TextureHandle baseColorTexture{};
+
+  // PBR only; ignored when shadingModel == Unlit.
+  /// Green channel = roughness, blue channel = metallic (glTF convention).
+  TextureHandle metallicRoughnessTexture{};
+  float metallicFactor{1.0f};
+  float roughnessFactor{1.0f};
+  TextureHandle emissiveTexture{};
+  Vec3 emissiveFactor{0.0f, 0.0f, 0.0f};
 };
 
 /// Everything Renderer::renderFrame() needs for one frame. Renderer never
@@ -118,9 +175,50 @@ struct RenderFrame {
   CameraDesc camera{};
   /// Color the backend clears the frame to before drawing commands.
   Color clearColor{0.0f, 0.0f, 0.0f, 1.0f};
+  /// Flat ambient term added to every PBR fragment regardless of light
+  /// visibility -- a placeholder for real image-based ambient lighting,
+  /// which this engine doesn't have yet. rgb = color, a = intensity.
+  Color ambientColor{0.03f, 0.03f, 0.035f, 1.0f};
+  /// Lights affecting this frame's PBR draws, capped at kMaxLights.
+  std::vector<LightDesc> lights{};
   /// Draw commands in submission order; backends may reorder for
   /// efficiency as long as the visual result is equivalent.
   std::vector<DrawCommand> commands{};
 };
 
-} // namespace Eden
+/// Multisample anti-aliasing level. A backend clamps a request it can't
+/// satisfy to whatever RendererCapabilities::maxAntiAliasing reports.
+enum class AntiAliasing { None, MSAA2x, MSAA4x, MSAA8x };
+
+/// Present-mode preference. Adaptive falls back to On on hardware without
+/// relaxed present support; a backend never fails a vsync request outright.
+enum class VsyncMode { Off, On, Adaptive };
+
+/// The subset of graphics settings a Renderer itself acts on -- everything
+/// else a settings menu exposes (screen mode, resolution, window chrome)
+/// is handled by whoever owns the window, never by Renderer.
+struct RenderSettings {
+  /// Anti-aliasing level to render with.
+  AntiAliasing antiAliasing{AntiAliasing::MSAA2x};
+  /// Present-mode preference.
+  VsyncMode vsync{VsyncMode::On};
+};
+
+/// What a Renderer backend can actually do on the current hardware; a
+/// settings menu should read this to know which choices are meaningful
+/// before offering them, rather than discovering a clamp after the fact.
+struct RendererCapabilities {
+  /// Highest anti-aliasing level this backend's device actually supports.
+  AntiAliasing maxAntiAliasing{AntiAliasing::None};
+};
+
+/// Result of Renderer::applySettings().
+enum class ApplyResult {
+  /// The backend updated itself in place; no caller action needed.
+  Applied,
+  /// The backend can't satisfy this request without being destroyed and
+  /// reconstructed; the caller (RenderSystem) is responsible for that.
+  RequiresRecreate,
+};
+
+} // namespace Eden::Rendering

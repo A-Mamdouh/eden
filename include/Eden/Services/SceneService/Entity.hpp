@@ -4,7 +4,7 @@
 
 #include <utility>
 
-namespace Eden {
+namespace Eden::World {
 
 /// Lightweight, copyable handle into a Scene's registry. Doesn't own the
 /// entity -- destroying the Scene (or the entity itself) invalidates it.
@@ -52,4 +52,4 @@ private:
   entt::registry *registry_{nullptr};
 };
 
-} // namespace Eden
+} // namespace Eden::World

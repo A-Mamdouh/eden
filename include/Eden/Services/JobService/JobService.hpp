@@ -10,7 +10,7 @@
 #include <thread>
 #include <vector>
 
-namespace Eden {
+namespace Eden::Services {
 
 /// Intended as a fixed-size worker-thread pool for offloading work off
 /// the main loop. Not currently constructed by Engine, and not currently
@@ -50,4 +50,4 @@ private:
   std::atomic<std::size_t> activeJobs_ = 0;
 };
 
-} // namespace Eden
+} // namespace Eden::Services

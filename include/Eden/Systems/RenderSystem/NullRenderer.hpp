@@ -4,7 +4,7 @@
 
 #include <vector>
 
-namespace Eden {
+namespace Eden::Rendering {
 
 /// Headless Renderer implementation: no window, no GPU, no graphics API
 /// calls. Exists for two reasons -- proving the Renderer contract is
@@ -22,6 +22,13 @@ public:
   void destroyTexture(TextureHandle handle) override;
   void renderFrame(const RenderFrame &frame) override;
   void requestResize(std::uint32_t width, std::uint32_t height) override;
+  ApplyResult applySettings(const RenderSettings &settings) override;
+  RendererCapabilities queryCapabilities() const override;
+
+  /// @return The settings passed to the most recent applySettings() call,
+  ///         or the default RenderSettings if it's never been called.
+  ///         Test-only inspection surface, not part of the Renderer contract.
+  const RenderSettings &lastSettings() const noexcept { return settings_; }
 
   /// @return Number of renderFrame() calls so far. Test-only inspection
   ///         surface, not part of the Renderer contract.
@@ -66,6 +73,7 @@ private:
   std::size_t frameCount_{0};
   std::uint32_t lastResizeWidth_{0};
   std::uint32_t lastResizeHeight_{0};
+  RenderSettings settings_{};
 };
 
-} // namespace Eden
+} // namespace Eden::Rendering

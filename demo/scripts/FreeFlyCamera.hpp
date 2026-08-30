@@ -10,12 +10,12 @@
 /// stays position/target/up so RenderSystem doesn't need to know this
 /// script exists; it just recomputes target each frame from position
 /// plus a forward vector derived from yaw/pitch.
-class FreeFlyCamera : public Eden::ScriptBehaviour {
+class FreeFlyCamera : public Eden::Scripting::ScriptBehaviour {
 public:
-  void onStart(Eden::Entity, Eden::InputSystem &input) override { input.setMouseCaptured(true); }
+  void onStart(Eden::Input::InputState &input) override { input.setMouseCaptured(true); }
 
-  void onUpdate(Eden::Entity entity, double dt, Eden::InputSystem &input) override {
-    if (input.isKeyPressed(Eden::Key::Escape)) {
+  void onUpdate(double dt, Eden::Input::InputState &input) override {
+    if (input.isKeyPressed(Eden::Input::Key::Escape)) {
       input.setMouseCaptured(!input.mouseCaptured());
     }
 
@@ -33,28 +33,28 @@ public:
     const Eden::Vec3 right = glm::normalize(glm::cross(forward, worldUp));
 
     Eden::Vec3 movement{0.0f};
-    if (input.isKeyDown(Eden::Key::W)) {
+    if (input.isKeyDown(Eden::Input::Key::W)) {
       movement += forward;
     }
-    if (input.isKeyDown(Eden::Key::S)) {
+    if (input.isKeyDown(Eden::Input::Key::S)) {
       movement -= forward;
     }
-    if (input.isKeyDown(Eden::Key::D)) {
+    if (input.isKeyDown(Eden::Input::Key::D)) {
       movement += right;
     }
-    if (input.isKeyDown(Eden::Key::A)) {
+    if (input.isKeyDown(Eden::Input::Key::A)) {
       movement -= right;
     }
-    if (input.isKeyDown(Eden::Key::Space)) {
+    if (input.isKeyDown(Eden::Input::Key::Space)) {
       movement += worldUp;
     }
-    if (input.isKeyDown(Eden::Key::LeftControl)) {
+    if (input.isKeyDown(Eden::Input::Key::LeftControl)) {
       movement -= worldUp;
     }
 
-    auto &camera = entity.getComponent<Eden::Camera>();
+    auto &camera = entity().getComponent<Eden::Rendering::Components::Camera>();
     if (glm::length(movement) > 0.0f) {
-      const float speed = input.isKeyDown(Eden::Key::LeftShift) ? kFastSpeed : kSpeed;
+      const float speed = input.isKeyDown(Eden::Input::Key::LeftShift) ? kFastSpeed : kSpeed;
       camera.position += glm::normalize(movement) * speed * static_cast<float>(dt);
     }
     camera.target = camera.position + forward;

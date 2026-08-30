@@ -5,7 +5,7 @@
 
 #include <memory>
 
-namespace Eden {
+namespace Eden::Services {
 
 /// Owns the active Scene and publishes SceneLoadedEvent on change. Holds
 /// data only -- TransformSystem and RenderSystem read/write its Scene's
@@ -17,15 +17,15 @@ public:
 
   /// Publishes Events::SceneLoadedEvent, then takes ownership of `scene`.
   /// @param scene New active scene; the previous one, if any, is destroyed.
-  void loadScene(std::unique_ptr<Scene> scene);
+  void loadScene(std::unique_ptr<World::Scene> scene);
 
   /// @return The active scene, or nullptr if loadScene() hasn't been
   ///         called yet.
-  Scene *activeScene() const { return activeScene_.get(); }
+  World::Scene *activeScene() const { return activeScene_.get(); }
 
 private:
   void onInit() override {}
-  std::unique_ptr<Scene> activeScene_{nullptr};
+  std::unique_ptr<World::Scene> activeScene_{nullptr};
 };
 
-} // namespace Eden
+} // namespace Eden::Services

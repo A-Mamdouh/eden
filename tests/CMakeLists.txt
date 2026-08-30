@@ -14,7 +14,7 @@ add_executable(EdenTests
 target_link_libraries(
     EdenTests
     PRIVATE
-        Eden
+        Eden::Eden
         GTest::gtest_main
 )
 

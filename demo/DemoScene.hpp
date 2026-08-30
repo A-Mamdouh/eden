@@ -8,7 +8,7 @@
 
 namespace Demo {
 
-std::unique_ptr<Eden::Scene> buildDemoScene(Eden::Engine &engine, const DemoMeshes &meshes,
-                                            Eden::Model signModel);
+std::unique_ptr<Eden::World::Scene> buildDemoScene(Eden::Engine &engine, const DemoMeshes &meshes,
+                                                    Eden::Rendering::Model signModel);
 
 } // namespace Demo

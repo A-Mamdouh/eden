@@ -5,7 +5,7 @@
 
 #include <span>
 
-namespace Eden {
+namespace Eden::Rendering {
 
 /// Axis-aligned bounding box in a mesh's local object space.
 struct AABB {
@@ -18,4 +18,4 @@ struct AABB {
 ///         `vertices` is empty.
 AABB computeBounds(std::span<const Vertex> vertices);
 
-} // namespace Eden
+} // namespace Eden::Rendering

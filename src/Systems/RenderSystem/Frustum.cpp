@@ -2,7 +2,7 @@
 
 #include <limits>
 
-namespace Eden {
+namespace Eden::Rendering {
 namespace {
 
 /// @return Row `row` of `m`, gathered across glm's column-major storage.
@@ -72,4 +72,4 @@ bool Frustum::intersects(const AABB &box, const Mat4 &transform) const {
   return true;
 }
 
-} // namespace Eden
+} // namespace Eden::Rendering

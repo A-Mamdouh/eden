@@ -4,9 +4,11 @@
 
 #include <string>
 
-namespace Eden {
-
+namespace Eden::Systems {
 class RenderSystem;
+}
+
+namespace Eden::Rendering {
 
 /// Parses the glTF/GLB file at `path` via cgltf, uploads its meshes and
 /// textures through `renderSystem`, creates one Material per glTF
@@ -16,6 +18,6 @@ class RenderSystem;
 /// baked in as a plain matrix.
 /// @throws std::runtime_error on any parse, buffer-load, image-decode, or
 ///         unsupported-primitive failure.
-Model loadGltfModel(const std::string &path, RenderSystem &renderSystem);
+Model loadGltfModel(const std::string &path, Systems::RenderSystem &renderSystem);
 
-} // namespace Eden
+} // namespace Eden::Rendering

@@ -16,7 +16,7 @@ struct OtherEvent : Eden::IEvent {
 } // namespace
 
 TEST(EventServiceTest, PublishInvokesSubscribedListener) {
-  Eden::EventService events;
+  Eden::Services::EventService events;
   int received = -1;
 
   events.subscribe<TestEvent>([&](const TestEvent &event) { received = event.value; });
@@ -26,12 +26,12 @@ TEST(EventServiceTest, PublishInvokesSubscribedListener) {
 }
 
 TEST(EventServiceTest, PublishWithNoListenersDoesNothing) {
-  Eden::EventService events;
+  Eden::Services::EventService events;
   EXPECT_NO_THROW(events.publish(TestEvent{.value = 1}));
 }
 
 TEST(EventServiceTest, MultipleListenersAllReceiveTheEvent) {
-  Eden::EventService events;
+  Eden::Services::EventService events;
   int firstCount = 0;
   int secondCount = 0;
 
@@ -44,7 +44,7 @@ TEST(EventServiceTest, MultipleListenersAllReceiveTheEvent) {
 }
 
 TEST(EventServiceTest, UnsubscribeStopsDelivery) {
-  Eden::EventService events;
+  Eden::Services::EventService events;
   int count = 0;
 
   const auto id = events.subscribe<TestEvent>([&](const TestEvent &) { ++count; });
@@ -56,7 +56,7 @@ TEST(EventServiceTest, UnsubscribeStopsDelivery) {
 }
 
 TEST(EventServiceTest, DifferentEventTypesDoNotCrossFire) {
-  Eden::EventService events;
+  Eden::Services::EventService events;
   bool testEventFired = false;
   bool otherEventFired = false;
 

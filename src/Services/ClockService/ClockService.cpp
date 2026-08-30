@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace Eden {
+namespace Eden::Services {
 
 void ClockService::onInit() { lastTick_ = Clock::now(); }
 
@@ -48,4 +48,4 @@ void ClockService::setPaused(bool paused) { paused_ = paused; }
 bool ClockService::isPaused() const { return paused_; }
 
 void ClockService::setTimeScale(double scale) { clockConfig_.timeScale = scale; }
-} // namespace Eden
+} // namespace Eden::Services

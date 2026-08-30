@@ -6,7 +6,8 @@
 
 #include <unordered_map>
 
-namespace Eden {
+namespace Eden::Systems {
+using namespace Eden::World;
 namespace {
 
 Mat4 computeWorldMatrix(entt::entity entity, entt::registry &registry,
@@ -45,4 +46,4 @@ void TransformSystem::update(double /*dt*/) {
   }
 }
 
-} // namespace Eden
+} // namespace Eden::Systems

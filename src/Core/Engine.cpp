@@ -12,6 +12,10 @@
 #include <spdlog/spdlog.h>
 
 namespace Eden {
+using namespace Services;
+using namespace Systems;
+using namespace World;
+using namespace Rendering;
 
 Engine::Engine(const Config::ApplicationConfig &appConfig) : config_{appConfig} {
   init();
@@ -33,16 +37,16 @@ void Engine::init() {
   sceneService_->init(eventService_);
 
   // Input runs first so scripts see this frame's fresh keyboard/mouse
-  // state, not last frame's.
+  // state, not last frame's -- ScriptSystem picks it up via
+  // Events::InputStateUpdatedEvent, not a direct reference.
   auto inputSystem = std::make_unique<InputSystem>();
   inputSystem->init(eventService_);
-  InputSystem &inputSystemRef = *inputSystem;
   systems_.push_back(std::move(inputSystem));
 
   // Scripts run next so any component writes they make (Transform,
   // Renderable, ...) are visible to TransformSystem/RenderSystem the
   // same frame, not one frame late.
-  auto scriptSystem = std::make_unique<ScriptSystem>(*sceneService_, inputSystemRef);
+  auto scriptSystem = std::make_unique<ScriptSystem>(*sceneService_);
   scriptSystem->init(eventService_);
   systems_.push_back(std::move(scriptSystem));
 
@@ -50,8 +54,7 @@ void Engine::init() {
   transformSystem->init(eventService_);
   systems_.push_back(std::move(transformSystem));
 
-  auto renderSystem = std::make_unique<RenderSystem>(config_.engine.window,
-                                                     config_.engine.render, *sceneService_);
+  auto renderSystem = std::make_unique<RenderSystem>(config_.engine.render, *sceneService_);
   renderSystem_ = renderSystem.get();
   renderSystem_->init(eventService_);
   systems_.push_back(std::move(renderSystem));
@@ -81,6 +84,12 @@ void Engine::stop() { running_ = false; }
 
 void Engine::loadScene(std::unique_ptr<Scene> scene) {
   sceneService_->loadScene(std::move(scene));
+}
+
+const Config::ApplicationConfig &Engine::config() const { return configService_->get(); }
+
+void Engine::updateConfig(const Config::ApplicationConfig &newConfig) {
+  configService_->update(newConfig);
 }
 
 Model Engine::loadModel(const std::string &path) { return renderSystem_->loadModel(path); }

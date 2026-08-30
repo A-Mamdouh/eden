@@ -10,7 +10,7 @@
 
 struct SDL_Window;
 
-namespace Eden {
+namespace Eden::Rendering {
 
 /// Vulkan implementation of the Renderer contract. Single frame in
 /// flight (one command buffer, one fence), host-visible/coherent memory
@@ -26,6 +26,10 @@ public:
     /// Requests the VK_LAYER_KHRONOS_validation layer; silently disabled
     /// with a warning if it isn't installed.
     bool enableValidationLayers{false};
+    /// Anti-aliasing/vsync to build the pipeline and swapchain with;
+    /// clamped against the picked device's actual limits, same as any
+    /// later applySettings() call.
+    RenderSettings initialSettings{};
   };
 
   /// Performs the full Vulkan setup sequence (instance through sync
@@ -42,6 +46,8 @@ public:
 
   void renderFrame(const RenderFrame &frame) override;
   void requestResize(std::uint32_t width, std::uint32_t height) override;
+  ApplyResult applySettings(const RenderSettings &settings) override;
+  RendererCapabilities queryCapabilities() const override;
 
 private:
   /// GPU-side storage for one createMesh() call. `alive` and
@@ -98,11 +104,19 @@ private:
   /// swapchainExtent_. Device-local (not host-visible): never written
   /// from the CPU, only cleared/tested by the GPU each frame.
   void createDepthResources();
-  /// Creates renderPass_ (color attachment + depth attachment, clear/store).
+  /// Creates colorImage_/colorImageMemory_/colorImageView_, the
+  /// multisampled color target the render pass resolves into the
+  /// swapchain image. No-ops (leaves them null) when sampleCount() is 1,
+  /// i.e. anti-aliasing is off.
+  void createColorResources();
+  /// Creates renderPass_: color + depth attachments, plus a resolve
+  /// attachment when sampleCount() > 1.
   void createRenderPass();
   /// Creates descriptorSetLayout_: one combined-image-sampler binding,
-  /// fragment stage, matching `layout(binding = 0) uniform sampler2D` in
-  /// mesh.frag.
+  /// fragment stage, matching `layout(set = N, binding = 0) uniform
+  /// sampler2D` in mesh.frag -- reused at three different pipeline-layout
+  /// set indices (baseColor/metallicRoughness/emissive), see
+  /// createGraphicsPipeline().
   void createDescriptorSetLayout();
   /// Creates textureSampler_: linear filtering, repeat addressing --
   /// reasonable defaults for glTF textures, not currently configurable
@@ -113,8 +127,35 @@ private:
   void createDescriptorPool();
   /// Uploads a 1x1 opaque white texture and stores it as
   /// defaultTexture_, so draws with no texture set still go through the
-  /// texture-sampling path in the fragment shader.
+  /// texture-sampling path in the fragment shader. Reused as the default
+  /// for all three material texture roles (baseColor/metallicRoughness/
+  /// emissive): `sampled * factor` is multiplicative-identity-safe for
+  /// each of them, so one shared white texture needs no per-role variant.
   void createDefaultTexture();
+  /// Creates frameDescriptorSetLayout_: one uniform-buffer binding, both
+  /// vertex and fragment stages (view/proj feed the former, everything
+  /// else -- camera position, ambient, lights -- feeds the latter),
+  /// matching `layout(set = 0, binding = 0) uniform FrameUBO` in both
+  /// mesh.vert and mesh.frag.
+  void createFrameDescriptorSetLayout();
+  /// Allocates frameUniformBuffer_/frameUniformBufferMemory_, sized for
+  /// one FrameUBO; host-visible/coherent like every other buffer this
+  /// renderer creates (see createBuffer()). Contents are (re)written every
+  /// frame by updateFrameUniformBuffer(), never resized.
+  void createFrameUniformBuffer();
+  /// Creates frameDescriptorPool_, sized for exactly the one set
+  /// frameDescriptorSet_ needs.
+  void createFrameDescriptorPool();
+  /// Allocates frameDescriptorSet_ and points it at frameUniformBuffer_
+  /// once; only the buffer's contents change per frame afterward (see
+  /// updateFrameUniformBuffer()), never the descriptor set's binding.
+  void createFrameDescriptorSet();
+  /// Packs `frame`'s camera/ambient/lights into a FrameUBO and uploads it
+  /// to frameUniformBuffer_. Called once per frame, before the draw loop,
+  /// from recordCommandBuffer() -- safe without per-frame-in-flight
+  /// duplication because renderFrame() already waits on inFlightFence_
+  /// (i.e. the previous frame's GPU work is done) before recording begins.
+  void updateFrameUniformBuffer(const RenderFrame &frame) const;
   /// (Re)builds the mesh pipeline from the precompiled
   /// mesh.vert/frag SPIR-V under EDEN_SHADER_DIR. Destroys any
   /// existing pipeline/layout first, so it's safe to call again on
@@ -179,6 +220,11 @@ private:
   /// Wraps precompiled SPIR-V `code` in a vk::ShaderModule; caller destroys it.
   vk::ShaderModule createShaderModule(const std::vector<std::uint32_t> &code) const;
 
+  /// @return currentSettings_.antiAliasing translated to a sample count
+  ///         and clamped to maxSampleCount_ -- the single source of truth
+  ///         every swapchain-dependent object builds against.
+  vk::SampleCountFlagBits sampleCount() const;
+
   /// @return The live GpuMesh for `handle`, or nullptr if it's invalid,
   ///         out of range, destroyed, or from a reused (stale) slot.
   const GpuMesh *findMesh(MeshHandle handle) const;
@@ -191,6 +237,14 @@ private:
   /// Set by requestResize(); consumed (and cleared) at the start of the
   /// next renderFrame().
   bool framebufferResized_{false};
+
+  /// Live anti-aliasing/vsync request; sampleCount() and createSwapchain()
+  /// both read this. Updated by applySettings().
+  RenderSettings currentSettings_{};
+  /// Highest MSAA sample count physicalDevice_ supports for both color and
+  /// depth attachments, capped at e8 (AntiAliasing's own ceiling); set once
+  /// in pickPhysicalDevice().
+  vk::SampleCountFlagBits maxSampleCount_{vk::SampleCountFlagBits::e1};
 
   vk::Instance instance_{};
   vk::SurfaceKHR surface_{};
@@ -213,11 +267,29 @@ private:
   vk::DeviceMemory depthImageMemory_{};
   vk::ImageView depthImageView_{};
 
+  /// The multisampled color attachment the render pass resolves into the
+  /// swapchain image; null when sampleCount() is 1 (anti-aliasing off).
+  vk::Image colorImage_{};
+  vk::DeviceMemory colorImageMemory_{};
+  vk::ImageView colorImageView_{};
+
   vk::DescriptorSetLayout descriptorSetLayout_{};
   vk::Sampler textureSampler_{};
   // Fixed-size pool (see createDescriptorPool()'s comment); not resized as
   // textures come and go.
   vk::DescriptorPool descriptorPool_{};
+
+  /// Set 0's layout (camera/ambient/lights UBO), the buffer backing it,
+  /// and the one descriptor set bound from it every frame. Created once in
+  /// initVulkan(), destroyed once in the destructor -- not swapchain-sized
+  /// (unlike descriptorSetLayout_'s per-texture sets, this isn't tied to
+  /// swapchain image count or format), so cleanupSwapchain()/
+  /// recreateSwapchain() never touch these.
+  vk::DescriptorSetLayout frameDescriptorSetLayout_{};
+  vk::DescriptorPool frameDescriptorPool_{};
+  vk::DescriptorSet frameDescriptorSet_{};
+  vk::Buffer frameUniformBuffer_{};
+  vk::DeviceMemory frameUniformBufferMemory_{};
 
   vk::PipelineLayout pipelineLayout_{};
   vk::Pipeline graphicsPipeline_{};
@@ -252,4 +324,4 @@ private:
   TextureHandle defaultTexture_{};
 };
 
-} // namespace Eden
+} // namespace Eden::Rendering

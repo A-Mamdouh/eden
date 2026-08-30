@@ -3,44 +3,46 @@
 
 #include <gtest/gtest.h>
 
+using namespace Eden::World;
+
 TEST(SceneTest, CreateEntityReturnsValidEntity) {
-  Eden::Scene scene;
+  Scene scene;
   auto entity = scene.createEntity();
 
   EXPECT_TRUE(entity.valid());
 }
 
 TEST(SceneTest, AddAndGetComponentRoundTrips) {
-  Eden::Scene scene;
+  Scene scene;
   auto entity = scene.createEntity();
 
-  entity.addComponent<Eden::Transform>(Eden::Transform{.position = {1.0f, 2.0f, 3.0f}});
+  entity.addComponent<Transform>(Transform{.position = {1.0f, 2.0f, 3.0f}});
 
-  ASSERT_TRUE(entity.hasComponent<Eden::Transform>());
-  const auto &transform = entity.getComponent<Eden::Transform>();
+  ASSERT_TRUE(entity.hasComponent<Transform>());
+  const auto &transform = entity.getComponent<Transform>();
   EXPECT_FLOAT_EQ(transform.position.x, 1.0f);
   EXPECT_FLOAT_EQ(transform.position.y, 2.0f);
   EXPECT_FLOAT_EQ(transform.position.z, 3.0f);
 }
 
 TEST(SceneTest, HasComponentIsFalseWhenNeverAdded) {
-  Eden::Scene scene;
+  Scene scene;
   auto entity = scene.createEntity();
 
-  EXPECT_FALSE(entity.hasComponent<Eden::WorldTransform>());
+  EXPECT_FALSE(entity.hasComponent<WorldTransform>());
 }
 
 TEST(SceneTest, DestroyEntityInvalidatesIt) {
-  Eden::Scene scene;
+  Scene scene;
   auto entity = scene.createEntity();
 
-  scene.destroyEntity(entity);
+  scene.destroyEntity(&entity);
 
   EXPECT_FALSE(entity.valid());
 }
 
 TEST(SceneTest, TransformLocalMatrixAppliesTranslation) {
-  Eden::Transform transform{};
+  Transform transform{};
   transform.position = {2.0f, 3.0f, 4.0f};
 
   const auto origin = transform.localMatrix() * Eden::Vec4{0.0f, 0.0f, 0.0f, 1.0f};
@@ -51,7 +53,7 @@ TEST(SceneTest, TransformLocalMatrixAppliesTranslation) {
 }
 
 TEST(SceneTest, DefaultTransformLocalMatrixIsIdentity) {
-  const Eden::Transform transform{};
+  const Transform transform{};
   const auto point = transform.localMatrix() * Eden::Vec4{5.0f, 6.0f, 7.0f, 1.0f};
 
   EXPECT_FLOAT_EQ(point.x, 5.0f);

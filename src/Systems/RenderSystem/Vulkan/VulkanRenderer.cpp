@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -22,7 +23,7 @@
 #define EDEN_SHADER_DIR ""
 #endif
 
-namespace Eden {
+namespace Eden::Rendering {
 namespace {
 
 constexpr std::array<const char *, 1> kValidationLayers = {
@@ -31,14 +32,74 @@ constexpr std::array<const char *, 1> kValidationLayers = {
 
 /// Upper bound on live textures at once; sized generously for a demo/asset
 /// scene, not meant to scale to a large open-world texture budget. Fixed
-/// so descriptorPool_ can be allocated once and never resized.
-constexpr std::uint32_t kMaxTextures = 256;
+/// so descriptorPool_ can be allocated once and never resized. Each PBR
+/// material can now reference up to 3 textures (baseColor/
+/// metallicRoughness/emissive) instead of 1, hence the higher cap than
+/// before.
+constexpr std::uint32_t kMaxTextures = 512;
 
+/// Mirrors RenderFrame's per-draw shading fields exactly (see
+/// RendererTypes.hpp's DrawCommand), pushed to the GPU once per draw call.
+/// Every field is a mat4, a full vec4, or a scalar -- never a bare vec3 --
+/// so there's no std430 padding to reason about; verified below.
 struct alignas(16) PushConstants {
-  Mat4 mvp{Mat4(1.0f)};
-  Vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
+  Mat4 model{Mat4(1.0f)};
+  Vec4 baseColorFactor{1.0f, 1.0f, 1.0f, 1.0f};
+  float metallicFactor{1.0f};
+  float roughnessFactor{1.0f};
   std::int32_t useVertexColor{0};
+  std::int32_t shadingModel{0};
+  Vec4 emissiveFactor{0.0f, 0.0f, 0.0f, 0.0f};
 };
+static_assert(offsetof(PushConstants, baseColorFactor) == 64);
+static_assert(offsetof(PushConstants, emissiveFactor) == 96);
+static_assert(sizeof(PushConstants) == 112,
+              "must stay <= 128 bytes, Vulkan's guaranteed minimum maxPushConstantsSize");
+
+/// One light's worth of GPU-side data; mirrors the `Light` struct in
+/// mesh.vert/mesh.frag exactly. std140 in a UBO array requires each
+/// element's size be a multiple of vec4's 16-byte alignment, which 3
+/// vec4s trivially satisfies.
+struct alignas(16) GpuLight {
+  /// xyz = world-space position (Point) or travel direction (Directional);
+  /// w = 0 for Directional, 1 for Point (mirrored in LightType's order).
+  Vec4 positionOrDirection{0.0f, 0.0f, 0.0f, 0.0f};
+  /// rgb = color, a = intensity.
+  Vec4 colorIntensity{1.0f, 1.0f, 1.0f, 1.0f};
+  /// x = range (Point only, 0 = no cutoff); yzw reserved (e.g. future
+  /// spot-light cone angles).
+  Vec4 params{0.0f, 0.0f, 0.0f, 0.0f};
+};
+static_assert(sizeof(GpuLight) == 48);
+
+/// Per-frame camera + lighting data, bound once at descriptor set 0 rather
+/// than per draw (unlike PushConstants) -- far too large for a push
+/// constant range, and shared by every draw in the frame regardless.
+/// Layout is std140-safe by the same "no bare vec3" rule as PushConstants;
+/// every offset below is independently verified by static_assert so a
+/// glm/compiler layout surprise fails to compile rather than corrupting
+/// the GPU-side read silently.
+struct alignas(16) FrameUBO {
+  Mat4 view{1.0f};
+  Mat4 proj{1.0f};
+  Vec4 cameraPosition{0.0f, 0.0f, 0.0f, 0.0f};
+  Vec4 ambientColor{0.0f, 0.0f, 0.0f, 0.0f};
+  /// Only .x is meaningful; the extra 3 ints exist purely to occupy the
+  /// same 16 bytes GLSL's ivec4 does, since std140 rounds a lone int up to
+  /// 16-byte alignment anyway -- packing it this way keeps the C++ struct
+  /// honest about where the padding actually goes rather than relying on
+  /// an implicit compiler-inserted gap.
+  std::int32_t lightCount{0};
+  std::int32_t _pad0{0};
+  std::int32_t _pad1{0};
+  std::int32_t _pad2{0};
+  std::array<GpuLight, kMaxLights> lights{};
+};
+static_assert(offsetof(FrameUBO, cameraPosition) == 128);
+static_assert(offsetof(FrameUBO, ambientColor) == 144);
+static_assert(offsetof(FrameUBO, lightCount) == 160);
+static_assert(offsetof(FrameUBO, lights) == 176);
+static_assert(sizeof(FrameUBO) == 176 + 48 * kMaxLights);
 
 struct QueueFamilyIndices {
   std::optional<std::uint32_t> graphicsFamily{};
@@ -135,14 +196,62 @@ vk::SurfaceFormatKHR chooseSurfaceFormat(
   return formats.front();
 }
 
-vk::PresentModeKHR choosePresentMode(
-    const std::vector<vk::PresentModeKHR> &modes) {
-  for (const auto mode : modes) {
-    if (mode == vk::PresentModeKHR::eMailbox) {
-      return mode;
-    }
+bool supportsPresentMode(const std::vector<vk::PresentModeKHR> &modes, vk::PresentModeKHR mode) {
+  return std::find(modes.begin(), modes.end(), mode) != modes.end();
+}
+
+/// eFifo is guaranteed by the Vulkan spec to always be supported, so it's
+/// the safe fallback whenever a preferred mode isn't available -- On maps
+/// straight to it, Off/Adaptive fall back to it rather than failing.
+vk::PresentModeKHR choosePresentMode(const std::vector<vk::PresentModeKHR> &modes,
+                                     VsyncMode vsync) {
+  switch (vsync) {
+  case VsyncMode::Off:
+    return supportsPresentMode(modes, vk::PresentModeKHR::eImmediate)
+               ? vk::PresentModeKHR::eImmediate
+               : vk::PresentModeKHR::eFifo;
+  case VsyncMode::Adaptive:
+    return supportsPresentMode(modes, vk::PresentModeKHR::eFifoRelaxed)
+               ? vk::PresentModeKHR::eFifoRelaxed
+               : vk::PresentModeKHR::eFifo;
+  case VsyncMode::On:
+  default:
+    return vk::PresentModeKHR::eFifo;
   }
-  return vk::PresentModeKHR::eFifo;
+}
+
+vk::SampleCountFlagBits toVkSampleCount(AntiAliasing aa) {
+  switch (aa) {
+  case AntiAliasing::MSAA2x:
+    return vk::SampleCountFlagBits::e2;
+  case AntiAliasing::MSAA4x:
+    return vk::SampleCountFlagBits::e4;
+  case AntiAliasing::MSAA8x:
+    return vk::SampleCountFlagBits::e8;
+  case AntiAliasing::None:
+  default:
+    return vk::SampleCountFlagBits::e1;
+  }
+}
+
+AntiAliasing toAntiAliasing(vk::SampleCountFlagBits samples) {
+  switch (samples) {
+  case vk::SampleCountFlagBits::e8:
+    return AntiAliasing::MSAA8x;
+  case vk::SampleCountFlagBits::e4:
+    return AntiAliasing::MSAA4x;
+  case vk::SampleCountFlagBits::e2:
+    return AntiAliasing::MSAA2x;
+  default:
+    return AntiAliasing::None;
+  }
+}
+
+/// Compares as plain integers rather than relying on operator<= existing
+/// for a Vulkan flag-bits enum (it generally doesn't).
+vk::SampleCountFlagBits clampSampleCount(vk::SampleCountFlagBits requested,
+                                        vk::SampleCountFlagBits max) {
+  return static_cast<std::uint32_t>(requested) <= static_cast<std::uint32_t>(max) ? requested : max;
 }
 
 vk::Extent2D chooseExtent(const vk::SurfaceCapabilitiesKHR &capabilities,
@@ -172,7 +281,8 @@ vk::Extent2D chooseExtent(const vk::SurfaceCapabilitiesKHR &capabilities,
 
 VulkanRenderer::VulkanRenderer(const CreateInfo &createInfo)
     : window_{createInfo.window},
-      enableValidationLayers_{createInfo.enableValidationLayers} {
+      enableValidationLayers_{createInfo.enableValidationLayers},
+      currentSettings_{createInfo.initialSettings} {
   if (!window_) {
     throw std::runtime_error("VulkanRenderer requires a valid SDL_Window");
   }
@@ -217,6 +327,21 @@ VulkanRenderer::~VulkanRenderer() {
     device_.destroyDescriptorSetLayout(descriptorSetLayout_);
   }
 
+  // Not swapchain-sized (see the members' own comment), so torn down here
+  // alongside the rest rather than in cleanupSwapchain().
+  if (frameDescriptorPool_) {
+    device_.destroyDescriptorPool(frameDescriptorPool_);
+  }
+  if (frameDescriptorSetLayout_) {
+    device_.destroyDescriptorSetLayout(frameDescriptorSetLayout_);
+  }
+  if (frameUniformBuffer_) {
+    device_.destroyBuffer(frameUniformBuffer_);
+  }
+  if (frameUniformBufferMemory_) {
+    device_.freeMemory(frameUniformBufferMemory_);
+  }
+
   if (inFlightFence_) {
     device_.destroyFence(inFlightFence_);
   }
@@ -255,6 +380,23 @@ void VulkanRenderer::requestResize(std::uint32_t /*width*/, std::uint32_t /*heig
   framebufferResized_ = true;
 }
 
+ApplyResult VulkanRenderer::applySettings(const RenderSettings &settings) {
+  currentSettings_ = settings;
+  // Anti-aliasing changes the render pass/pipeline's attachment layout and
+  // vsync changes the swapchain's present mode -- both are already exactly
+  // what recreateSwapchain() rebuilds, without touching instance_/device_.
+  recreateSwapchain();
+  return ApplyResult::Applied;
+}
+
+RendererCapabilities VulkanRenderer::queryCapabilities() const {
+  return RendererCapabilities{toAntiAliasing(maxSampleCount_)};
+}
+
+vk::SampleCountFlagBits VulkanRenderer::sampleCount() const {
+  return clampSampleCount(toVkSampleCount(currentSettings_.antiAliasing), maxSampleCount_);
+}
+
 void VulkanRenderer::initVulkan() {
   createInstance();
   createSurface();
@@ -264,11 +406,16 @@ void VulkanRenderer::initVulkan() {
   createSwapchain();
   createImageViews();
   createDepthResources();
+  createColorResources();
   createRenderPass();
   createDescriptorSetLayout();
   createTextureSampler();
   createDescriptorPool();
   createDefaultTexture();
+  createFrameDescriptorSetLayout();
+  createFrameUniformBuffer();
+  createFrameDescriptorPool();
+  createFrameDescriptorSet();
   createGraphicsPipeline();
   createFramebuffers();
   allocateCommandBuffers();
@@ -349,6 +496,23 @@ void VulkanRenderer::pickPhysicalDevice() {
   if (!physicalDevice_) {
     throw std::runtime_error("Failed to find a suitable GPU");
   }
+
+  // Highest count both color and depth attachments can agree on; capped by
+  // the candidates list at e8 since AntiAliasing itself has no higher
+  // level to request. Hardware reporting less than e2 for either just
+  // means maxSampleCount_ stays e1 -- anti-aliasing genuinely isn't
+  // available, not a policy choice.
+  const auto limits = physicalDevice_.getProperties().limits;
+  const vk::SampleCountFlags supported =
+      limits.framebufferColorSampleCounts & limits.framebufferDepthSampleCounts;
+  maxSampleCount_ = vk::SampleCountFlagBits::e1;
+  for (const auto candidate : {vk::SampleCountFlagBits::e8, vk::SampleCountFlagBits::e4,
+                               vk::SampleCountFlagBits::e2}) {
+    if (supported & candidate) {
+      maxSampleCount_ = candidate;
+      break;
+    }
+  }
 }
 
 void VulkanRenderer::createLogicalDevice() {
@@ -393,7 +557,7 @@ void VulkanRenderer::createSwapchain() {
   const auto details = querySwapchainSupport(physicalDevice_, surface_);
 
   const auto surfaceFormat = chooseSurfaceFormat(details.formats);
-  const auto presentMode = choosePresentMode(details.presentModes);
+  const auto presentMode = choosePresentMode(details.presentModes, currentSettings_.vsync);
   const auto extent = chooseExtent(details.capabilities, window_);
 
   std::uint32_t imageCount = details.capabilities.minImageCount + 1;
@@ -488,7 +652,7 @@ void VulkanRenderer::createDepthResources() {
   imageInfo.tiling = vk::ImageTiling::eOptimal;
   imageInfo.initialLayout = vk::ImageLayout::eUndefined;
   imageInfo.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
-  imageInfo.samples = vk::SampleCountFlagBits::e1;
+  imageInfo.samples = sampleCount();
   imageInfo.sharingMode = vk::SharingMode::eExclusive;
 
   depthImage_ = device_.createImage(imageInfo);
@@ -515,26 +679,87 @@ void VulkanRenderer::createDepthResources() {
   depthImageView_ = device_.createImageView(viewInfo);
 }
 
+void VulkanRenderer::createColorResources() {
+  if (sampleCount() == vk::SampleCountFlagBits::e1) {
+    return;
+  }
+
+  vk::ImageCreateInfo imageInfo{};
+  imageInfo.imageType = vk::ImageType::e2D;
+  imageInfo.extent = vk::Extent3D{swapchainExtent_.width, swapchainExtent_.height, 1};
+  imageInfo.mipLevels = 1;
+  imageInfo.arrayLayers = 1;
+  imageInfo.format = swapchainImageFormat_;
+  imageInfo.tiling = vk::ImageTiling::eOptimal;
+  imageInfo.initialLayout = vk::ImageLayout::eUndefined;
+  imageInfo.usage = vk::ImageUsageFlagBits::eColorAttachment;
+  imageInfo.samples = sampleCount();
+  imageInfo.sharingMode = vk::SharingMode::eExclusive;
+
+  colorImage_ = device_.createImage(imageInfo);
+
+  const vk::MemoryRequirements memRequirements = device_.getImageMemoryRequirements(colorImage_);
+  vk::MemoryAllocateInfo allocInfo{};
+  allocInfo.allocationSize = memRequirements.size;
+  allocInfo.memoryTypeIndex =
+      findMemoryType(memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+  colorImageMemory_ = device_.allocateMemory(allocInfo);
+  device_.bindImageMemory(colorImage_, colorImageMemory_, 0);
+
+  vk::ImageViewCreateInfo viewInfo{};
+  viewInfo.image = colorImage_;
+  viewInfo.viewType = vk::ImageViewType::e2D;
+  viewInfo.format = swapchainImageFormat_;
+  viewInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+  viewInfo.subresourceRange.baseMipLevel = 0;
+  viewInfo.subresourceRange.levelCount = 1;
+  viewInfo.subresourceRange.baseArrayLayer = 0;
+  viewInfo.subresourceRange.layerCount = 1;
+
+  colorImageView_ = device_.createImageView(viewInfo);
+}
+
 void VulkanRenderer::createRenderPass() {
+  const vk::SampleCountFlagBits samples = sampleCount();
+  const bool multisampled = samples != vk::SampleCountFlagBits::e1;
+
   vk::AttachmentDescription colorAttachment{};
   colorAttachment.format = swapchainImageFormat_;
-  colorAttachment.samples = vk::SampleCountFlagBits::e1;
+  colorAttachment.samples = samples;
   colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-  colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+  // Multisampled: the resolve attachment below is what actually gets
+  // presented, so this attachment's own contents don't need to survive
+  // past the subpass.
+  colorAttachment.storeOp =
+      multisampled ? vk::AttachmentStoreOp::eDontCare : vk::AttachmentStoreOp::eStore;
   colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
   colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
   colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
-  colorAttachment.finalLayout = vk::ImageLayout::ePresentSrcKHR;
+  colorAttachment.finalLayout =
+      multisampled ? vk::ImageLayout::eColorAttachmentOptimal : vk::ImageLayout::ePresentSrcKHR;
 
   vk::AttachmentDescription depthAttachment{};
   depthAttachment.format = depthFormat_;
-  depthAttachment.samples = vk::SampleCountFlagBits::e1;
+  depthAttachment.samples = samples;
   depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
   depthAttachment.storeOp = vk::AttachmentStoreOp::eDontCare;
   depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
   depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
   depthAttachment.initialLayout = vk::ImageLayout::eUndefined;
   depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+
+  // Only used/attached when multisampled; single-sample rendering writes
+  // straight to the swapchain image via colorAttachment above instead.
+  vk::AttachmentDescription resolveAttachment{};
+  resolveAttachment.format = swapchainImageFormat_;
+  resolveAttachment.samples = vk::SampleCountFlagBits::e1;
+  resolveAttachment.loadOp = vk::AttachmentLoadOp::eDontCare;
+  resolveAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+  resolveAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+  resolveAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+  resolveAttachment.initialLayout = vk::ImageLayout::eUndefined;
+  resolveAttachment.finalLayout = vk::ImageLayout::ePresentSrcKHR;
 
   vk::AttachmentReference colorAttachmentRef{};
   colorAttachmentRef.attachment = 0;
@@ -544,11 +769,18 @@ void VulkanRenderer::createRenderPass() {
   depthAttachmentRef.attachment = 1;
   depthAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 
+  vk::AttachmentReference resolveAttachmentRef{};
+  resolveAttachmentRef.attachment = 2;
+  resolveAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
+
   vk::SubpassDescription subpass{};
   subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
   subpass.colorAttachmentCount = 1;
   subpass.pColorAttachments = &colorAttachmentRef;
   subpass.pDepthStencilAttachment = &depthAttachmentRef;
+  if (multisampled) {
+    subpass.pResolveAttachments = &resolveAttachmentRef;
+  }
 
   vk::SubpassDependency dependency{};
   dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -561,7 +793,10 @@ void VulkanRenderer::createRenderPass() {
   dependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite |
                              vk::AccessFlagBits::eDepthStencilAttachmentWrite;
 
-  const std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
+  std::vector<vk::AttachmentDescription> attachments = {colorAttachment, depthAttachment};
+  if (multisampled) {
+    attachments.push_back(resolveAttachment);
+  }
 
   vk::RenderPassCreateInfo renderPassInfo{};
   renderPassInfo.attachmentCount = static_cast<std::uint32_t>(attachments.size());
@@ -629,6 +864,84 @@ void VulkanRenderer::createDefaultTexture() {
   desc.pixels = whitePixel;
 
   defaultTexture_ = createTexture(desc);
+}
+
+void VulkanRenderer::createFrameDescriptorSetLayout() {
+  vk::DescriptorSetLayoutBinding uboBinding{};
+  uboBinding.binding = 0;
+  uboBinding.descriptorType = vk::DescriptorType::eUniformBuffer;
+  uboBinding.descriptorCount = 1;
+  uboBinding.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+
+  vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+  layoutInfo.bindingCount = 1;
+  layoutInfo.pBindings = &uboBinding;
+
+  frameDescriptorSetLayout_ = device_.createDescriptorSetLayout(layoutInfo);
+}
+
+void VulkanRenderer::createFrameUniformBuffer() {
+  std::tie(frameUniformBuffer_, frameUniformBufferMemory_) =
+      createBuffer(sizeof(FrameUBO), vk::BufferUsageFlagBits::eUniformBuffer);
+}
+
+void VulkanRenderer::createFrameDescriptorPool() {
+  vk::DescriptorPoolSize poolSize{};
+  poolSize.type = vk::DescriptorType::eUniformBuffer;
+  poolSize.descriptorCount = 1;
+
+  vk::DescriptorPoolCreateInfo poolInfo{};
+  poolInfo.poolSizeCount = 1;
+  poolInfo.pPoolSizes = &poolSize;
+  poolInfo.maxSets = 1;
+
+  frameDescriptorPool_ = device_.createDescriptorPool(poolInfo);
+}
+
+void VulkanRenderer::createFrameDescriptorSet() {
+  vk::DescriptorSetAllocateInfo allocInfo{};
+  allocInfo.descriptorPool = frameDescriptorPool_;
+  allocInfo.descriptorSetCount = 1;
+  allocInfo.pSetLayouts = &frameDescriptorSetLayout_;
+
+  frameDescriptorSet_ = device_.allocateDescriptorSets(allocInfo).front();
+
+  vk::DescriptorBufferInfo bufferInfo{};
+  bufferInfo.buffer = frameUniformBuffer_;
+  bufferInfo.offset = 0;
+  bufferInfo.range = sizeof(FrameUBO);
+
+  vk::WriteDescriptorSet write{};
+  write.dstSet = frameDescriptorSet_;
+  write.dstBinding = 0;
+  write.dstArrayElement = 0;
+  write.descriptorType = vk::DescriptorType::eUniformBuffer;
+  write.descriptorCount = 1;
+  write.pBufferInfo = &bufferInfo;
+
+  device_.updateDescriptorSets(write, {});
+}
+
+void VulkanRenderer::updateFrameUniformBuffer(const RenderFrame &frame) const {
+  FrameUBO ubo{};
+  ubo.view = frame.camera.view;
+  ubo.proj = frame.camera.projection;
+  ubo.cameraPosition = Vec4{frame.camera.position, 0.0f};
+  ubo.ambientColor = Vec4{frame.ambientColor.r, frame.ambientColor.g, frame.ambientColor.b, frame.ambientColor.a};
+
+  const std::size_t lightCount = std::min(frame.lights.size(), kMaxLights);
+  ubo.lightCount = static_cast<std::int32_t>(lightCount);
+  for (std::size_t i = 0; i < lightCount; ++i) {
+    const LightDesc &light = frame.lights[i];
+    GpuLight &gpuLight = ubo.lights[i];
+    gpuLight.positionOrDirection = light.type == LightType::Point
+                                        ? Vec4{light.position, 1.0f}
+                                        : Vec4{light.direction, 0.0f};
+    gpuLight.colorIntensity = Vec4{light.color, light.intensity};
+    gpuLight.params = Vec4{light.range, 0.0f, 0.0f, 0.0f};
+  }
+
+  uploadToBuffer(frameUniformBufferMemory_, &ubo, sizeof(ubo));
 }
 
 std::vector<std::uint32_t> VulkanRenderer::loadShaderBinary(const std::string &filename) const {
@@ -703,7 +1016,7 @@ void VulkanRenderer::createGraphicsPipeline() {
   bindingDescription.stride = sizeof(Vertex);
   bindingDescription.inputRate = vk::VertexInputRate::eVertex;
 
-  vk::VertexInputAttributeDescription attributeDescriptions[3]{};
+  vk::VertexInputAttributeDescription attributeDescriptions[4]{};
   attributeDescriptions[0].binding = 0;
   attributeDescriptions[0].location = 0;
   attributeDescriptions[0].format = vk::Format::eR32G32B32Sfloat;
@@ -712,17 +1025,22 @@ void VulkanRenderer::createGraphicsPipeline() {
   attributeDescriptions[1].binding = 0;
   attributeDescriptions[1].location = 1;
   attributeDescriptions[1].format = vk::Format::eR32G32B32Sfloat;
-  attributeDescriptions[1].offset = offsetof(Vertex, color);
+  attributeDescriptions[1].offset = offsetof(Vertex, normal);
 
   attributeDescriptions[2].binding = 0;
   attributeDescriptions[2].location = 2;
-  attributeDescriptions[2].format = vk::Format::eR32G32Sfloat;
-  attributeDescriptions[2].offset = offsetof(Vertex, uv);
+  attributeDescriptions[2].format = vk::Format::eR32G32B32Sfloat;
+  attributeDescriptions[2].offset = offsetof(Vertex, color);
+
+  attributeDescriptions[3].binding = 0;
+  attributeDescriptions[3].location = 3;
+  attributeDescriptions[3].format = vk::Format::eR32G32Sfloat;
+  attributeDescriptions[3].offset = offsetof(Vertex, uv);
 
   vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
   vertexInputInfo.vertexBindingDescriptionCount = 1;
   vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-  vertexInputInfo.vertexAttributeDescriptionCount = 3;
+  vertexInputInfo.vertexAttributeDescriptionCount = 4;
   vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions;
 
   vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
@@ -743,7 +1061,7 @@ void VulkanRenderer::createGraphicsPipeline() {
   rasterizer.lineWidth = 1.0f;
 
   vk::PipelineMultisampleStateCreateInfo multisampling{};
-  multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+  multisampling.rasterizationSamples = sampleCount();
   multisampling.sampleShadingEnable = VK_FALSE;
 
   vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
@@ -770,13 +1088,20 @@ void VulkanRenderer::createGraphicsPipeline() {
   dynamicState.pDynamicStates = dynamicStates;
 
   vk::PushConstantRange pushConstantRange{};
-  pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eVertex;
+  pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
   pushConstantRange.offset = 0;
   pushConstantRange.size = sizeof(PushConstants);
 
+  // Set 0 is the per-frame camera/lights UBO; sets 1-3 are the material's
+  // baseColor/metallicRoughness/emissive textures -- three occurrences of
+  // the same one-binding sampler layout, distinguished only by set index
+  // (see createDescriptorSetLayout()'s comment).
+  const std::array<vk::DescriptorSetLayout, 4> setLayouts = {
+      frameDescriptorSetLayout_, descriptorSetLayout_, descriptorSetLayout_, descriptorSetLayout_};
+
   vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
-  pipelineLayoutInfo.setLayoutCount = 1;
-  pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout_;
+  pipelineLayoutInfo.setLayoutCount = static_cast<std::uint32_t>(setLayouts.size());
+  pipelineLayoutInfo.pSetLayouts = setLayouts.data();
   pipelineLayoutInfo.pushConstantRangeCount = 1;
   pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
@@ -811,11 +1136,17 @@ void VulkanRenderer::createGraphicsPipeline() {
 }
 
 void VulkanRenderer::createFramebuffers() {
+  const bool multisampled = sampleCount() != vk::SampleCountFlagBits::e1;
+
   swapchainFramebuffers_.clear();
   swapchainFramebuffers_.reserve(swapchainImageViews_.size());
 
   for (const auto view : swapchainImageViews_) {
-    const std::array<vk::ImageView, 2> attachments = {view, depthImageView_};
+    // Attachment order must match createRenderPass()'s attachment indices:
+    // color=0, depth=1, resolve=2 when multisampled.
+    const std::vector<vk::ImageView> attachments =
+        multisampled ? std::vector<vk::ImageView>{colorImageView_, depthImageView_, view}
+                     : std::vector<vk::ImageView>{view, depthImageView_};
 
     vk::FramebufferCreateInfo framebufferInfo{};
     framebufferInfo.renderPass = renderPass_;
@@ -1246,6 +1577,19 @@ void VulkanRenderer::cleanupSwapchain() {
     depthImageMemory_ = nullptr;
   }
 
+  if (colorImageView_) {
+    device_.destroyImageView(colorImageView_);
+    colorImageView_ = nullptr;
+  }
+  if (colorImage_) {
+    device_.destroyImage(colorImage_);
+    colorImage_ = nullptr;
+  }
+  if (colorImageMemory_) {
+    device_.freeMemory(colorImageMemory_);
+    colorImageMemory_ = nullptr;
+  }
+
   for (const auto view : swapchainImageViews_) {
     device_.destroyImageView(view);
   }
@@ -1273,6 +1617,7 @@ void VulkanRenderer::recreateSwapchain() {
   createSwapchain();
   createImageViews();
   createDepthResources();
+  createColorResources();
   createRenderPass();
   createGraphicsPipeline();
   createFramebuffers();
@@ -1322,7 +1667,9 @@ void VulkanRenderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, std::u
     scissor.extent = swapchainExtent_;
     commandBuffer.setScissor(0, scissor);
 
-    const Mat4 viewProjection = frame.camera.projection * frame.camera.view;
+    updateFrameUniformBuffer(frame);
+    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout_, 0,
+                                     frameDescriptorSet_, {});
 
     for (const auto &draw : frame.commands) {
       const GpuMesh *mesh = findMesh(draw.mesh);
@@ -1331,20 +1678,30 @@ void VulkanRenderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, std::u
       }
 
       PushConstants pushConstants{};
-      pushConstants.mvp = viewProjection * draw.transform;
-      pushConstants.color = Vec4{draw.tint.r, draw.tint.g, draw.tint.b, draw.tint.a};
+      pushConstants.model = draw.transform;
+      pushConstants.baseColorFactor =
+          Vec4{draw.baseColorFactor.r, draw.baseColorFactor.g, draw.baseColorFactor.b, draw.baseColorFactor.a};
+      pushConstants.metallicFactor = draw.metallicFactor;
+      pushConstants.roughnessFactor = draw.roughnessFactor;
       pushConstants.useVertexColor = draw.useVertexColor ? 1 : 0;
+      pushConstants.shadingModel = static_cast<std::int32_t>(draw.shadingModel);
+      pushConstants.emissiveFactor = Vec4{draw.emissiveFactor, 0.0f};
 
-      commandBuffer.pushConstants(pipelineLayout_, vk::ShaderStageFlagBits::eVertex, 0,
+      commandBuffer.pushConstants(pipelineLayout_,
+                                  vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0,
                                   sizeof(PushConstants), &pushConstants);
 
-      const GpuTexture *texture = findTexture(draw.texture);
-      if (!texture) {
-        texture = findTexture(defaultTexture_);
-      }
-      if (texture) {
-        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout_, 0,
-                                         texture->descriptorSet, {});
+      auto resolveOrDefault = [this](TextureHandle handle) -> const GpuTexture * {
+        const GpuTexture *texture = findTexture(handle);
+        return texture ? texture : findTexture(defaultTexture_);
+      };
+      const GpuTexture *baseColor = resolveOrDefault(draw.baseColorTexture);
+      const GpuTexture *metallicRoughness = resolveOrDefault(draw.metallicRoughnessTexture);
+      const GpuTexture *emissive = resolveOrDefault(draw.emissiveTexture);
+      if (baseColor && metallicRoughness && emissive) {
+        const std::array<vk::DescriptorSet, 3> materialSets = {
+            baseColor->descriptorSet, metallicRoughness->descriptorSet, emissive->descriptorSet};
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout_, 1, materialSets, {});
       }
 
       vk::DeviceSize offsets[] = {0};
@@ -1430,9 +1787,10 @@ void VulkanRenderer::renderFrame(const RenderFrame &frame) {
   }
 }
 
-std::unique_ptr<Renderer> createVulkanRenderer(SDL_Window *window, bool enableValidationLayers) {
-  return std::make_unique<VulkanRenderer>(
-      VulkanRenderer::CreateInfo{.window = window, .enableValidationLayers = enableValidationLayers});
+std::unique_ptr<Renderer> createVulkanRenderer(SDL_Window *window, bool enableValidationLayers,
+                                               const RenderSettings &initialSettings) {
+  return std::make_unique<VulkanRenderer>(VulkanRenderer::CreateInfo{
+      .window = window, .enableValidationLayers = enableValidationLayers, .initialSettings = initialSettings});
 }
 
-} // namespace Eden
+} // namespace Eden::Rendering

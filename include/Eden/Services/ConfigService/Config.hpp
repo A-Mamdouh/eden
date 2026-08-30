@@ -1,44 +1,77 @@
 #pragma once
 
+#include "Eden/Systems/RenderSystem/RendererTypes.hpp"
+
+#include <cstdint>
 #include <string>
 
 /// Plain-data configuration structs. No behavior lives here; ConfigService
 /// owns the live instance and Engine hands slices of it to each
-/// Service/System constructor.
-namespace Eden::Config {
+/// Service/System constructor. Every field here is live: RenderSystem
+/// reacts to a ConfigService::update() call the same way regardless of
+/// which field changed, including backend/validation-layer choices --
+/// there's no separate "construction-only" config, since a caller that
+/// wants to e.g. swap Renderer backends at runtime should be able to.
+/// Grouped by domain, mirroring Eden's other namespaces: only the two
+/// aggregates that necessarily span every domain (EngineConfig,
+/// ApplicationConfig) live directly in Eden::Config.
+namespace Eden::Config::Rendering {
 
-/// SDL window creation parameters, owned by RenderSystem.
+/// Which Renderer implementation to construct.
+enum class RendererBackend { Vulkan, Null };
+
+/// How the OS window occupies the screen.
+enum class ScreenMode { Windowed, Borderless, Fullscreen };
+
+/// SDL window chrome, owned by RenderSystem. Not something a settings
+/// menu would ever expose -- contrast with DisplaySettings.
 struct WindowConfig {
-  /// Initial window width in pixels.
-  int width{1280};
-  /// Initial window height in pixels.
-  int height{720};
-  /// Whether to create the window in borderless fullscreen-desktop mode.
-  bool fullscreen{false};
   /// Whether the OS window can be resized after creation.
   bool resizable{true};
   /// Text shown in the OS window title bar.
   std::string title{"Eden"};
 };
 
-/// Rendering backend parameters, owned by RenderSystem.
+/// The "Display" tab of a settings menu, in the naming games conventionally
+/// use for it -- everything here is a candidate for a runtime settings UI.
+struct DisplaySettings {
+  /// Windowed, borderless-fullscreen, or exclusive fullscreen.
+  ScreenMode screenMode{ScreenMode::Windowed};
+  /// Window/display width in pixels.
+  std::uint32_t width{1280};
+  /// Window/display height in pixels.
+  std::uint32_t height{720};
+  /// Present-mode preference; see Renderer::applySettings().
+  Eden::Rendering::VsyncMode vsync{Eden::Rendering::VsyncMode::On};
+  /// Target frames per second; 0 means uncapped. Not currently enforced
+  /// anywhere (no frame limiter exists yet), reserved for when one is added.
+  float targetFrameRate{0.0f};
+};
+
+/// The "Graphics" tab of a settings menu -- quality settings that go
+/// through Renderer::applySettings(), as opposed to DisplaySettings'
+/// window-level fields.
+struct GraphicsSettings {
+  /// Anti-aliasing level; see Renderer::applySettings().
+  Eden::Rendering::AntiAliasing antiAliasing{Eden::Rendering::AntiAliasing::None};
+};
+
+/// Rendering backend parameters, owned by RenderSystem -- everything
+/// RenderSystem needs to create its window and Renderer.
 struct RenderConfig {
+  /// Which Renderer implementation to construct.
+  RendererBackend backend{RendererBackend::Vulkan};
   /// Requests Vulkan validation layers if available; falls back to off
   /// with a warning if the layer isn't installed.
   bool enableValidationLayers{false};
-  /// Target frames per second; not currently enforced anywhere (no
-  /// frame limiter exists yet), reserved for when one is added.
-  float targetFrameRate{60.0f};
-  /// If true, ignore targetFrameRate and run uncapped.
-  bool enableMaxFPS{false};
+  WindowConfig window{};
+  DisplaySettings display{};
+  GraphicsSettings graphics{};
 };
 
-/// JobService worker-pool sizing. Currently unused: JobService's
-/// constructor doesn't take this config, and nothing wires it up.
-struct JobServiceConfig {
-  /// Worker thread count. See struct doc: not wired up yet.
-  int numWorkers{4};
-};
+} // namespace Eden::Config::Rendering
+
+namespace Eden::Config::Clock {
 
 /// ClockService fixed-timestep and time-scaling parameters.
 struct ClockConfig {
@@ -52,16 +85,29 @@ struct ClockConfig {
   double timeScale{1.0};
 };
 
+} // namespace Eden::Config::Clock
+
+namespace Eden::Config::Jobs {
+
+/// JobService worker-pool sizing. Currently unused: JobService's
+/// constructor doesn't take this config, and nothing wires it up.
+struct JobServiceConfig {
+  /// Worker thread count. See struct doc: not wired up yet.
+  int numWorkers{4};
+};
+
+} // namespace Eden::Config::Jobs
+
+namespace Eden::Config {
+
 /// Aggregate of every subsystem's configuration; one instance per Engine.
 struct EngineConfig {
   /// Passed to RenderSystem's constructor.
-  WindowConfig window{};
-  /// Passed to RenderSystem's constructor.
-  RenderConfig render{};
+  Rendering::RenderConfig render{};
   /// Passed to ClockService's constructor.
-  ClockConfig clock{};
-  /// See JobServiceConfig -- not currently consumed by anything.
-  JobServiceConfig jobs{};
+  Clock::ClockConfig clock{};
+  /// See Jobs::JobServiceConfig -- not currently consumed by anything.
+  Jobs::JobServiceConfig jobs{};
 };
 
 /// Top-level config an application supplies to Engine's constructor.

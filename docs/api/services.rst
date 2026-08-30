@@ -4,38 +4,35 @@ Services
 .. doxygenclass:: Eden::IService
    :members:
 
-.. doxygenclass:: Eden::EventService
+.. doxygenclass:: Eden::Services::EventService
    :members:
 
-.. doxygenclass:: Eden::ConfigService
+.. doxygenclass:: Eden::Services::ConfigService
    :members:
 
-.. doxygenclass:: Eden::ClockService
+.. doxygenclass:: Eden::Services::ClockService
    :members:
 
-.. doxygenclass:: Eden::JobService
+.. doxygenclass:: Eden::Services::JobService
    :members:
 
-.. doxygenclass:: Eden::SceneService
+.. doxygenclass:: Eden::Services::SceneService
    :members:
 
-.. doxygenclass:: Eden::Scene
+.. doxygenclass:: Eden::World::Scene
    :members:
 
-.. doxygenclass:: Eden::Entity
+.. doxygenclass:: Eden::World::Entity
    :members:
 
-Scene components
-----------------
+Scene objects
+-------------
 
-.. doxygenstruct:: Eden::Transform
+.. doxygenstruct:: Eden::World::Transform
    :members:
 
-.. doxygenstruct:: Eden::EntityHierarchy
+.. doxygenstruct:: Eden::World::EntityHierarchy
    :members:
 
-.. doxygenstruct:: Eden::WorldTransform
-   :members:
-
-.. doxygenstruct:: Eden::Camera
+.. doxygenstruct:: Eden::World::WorldTransform
    :members:

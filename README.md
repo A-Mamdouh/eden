@@ -12,6 +12,7 @@ that.
 **[Full documentation and API reference →](https://a-mamdouh.github.io/eden/)**
 
 ![Eden demo screenshot](docs/_static/demo-screenshot.png)
+![Eden demo 3D scene screenshot](docs/_static/demo-3d-scene.png)
 
 ## What this is
 
@@ -49,6 +50,38 @@ cmake --build build
 ```sh
 ctest --test-dir build --output-on-failure   # run the test suite
 ```
+
+### Using Eden from another CMake project
+
+Eden exposes the namespaced target `Eden::Eden`. When Eden is added as a
+subproject, only the library is enabled by default; its demo and test suite are
+not configured and GoogleTest is not discovered or fetched.
+
+```cmake
+include(FetchContent)
+
+FetchContent_Declare(
+    Eden
+    GIT_REPOSITORY https://github.com/A-Mamdouh/eden.git
+    GIT_TAG main # Prefer a release tag or pinned commit in production.
+)
+FetchContent_MakeAvailable(Eden)
+
+target_link_libraries(MyApplication PRIVATE Eden::Eden)
+```
+
+Eden's build options are:
+
+| Option | Standalone default | Dependency default | Purpose |
+| --- | ---: | ---: | --- |
+| `EDEN_BUILD_LIBRARY` | `ON` | `ON` | Build the `Eden::Eden` library target. |
+| `EDEN_BUILD_DEMO` | `ON` | `OFF` | Build the standalone demo. |
+| `EDEN_BUILD_TESTS` | `ON` | `OFF` | Fetch/find GoogleTest and build Eden's tests. |
+| `EDEN_BUILD_DOCS` | `OFF` | `OFF` | Build the Doxygen/Sphinx documentation. |
+
+The Vulkan SDK remains required when building the library because Eden's
+current renderer implementation links the Vulkan loader and compiles shaders
+with `glslc`.
 
 ## Project layout
 
