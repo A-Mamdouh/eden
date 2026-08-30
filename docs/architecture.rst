@@ -426,9 +426,9 @@ To build this documentation locally, without needing the Vulkan SDK or
 any other engine dependency::
 
    pip install -r docs/requirements.txt
-   cmake -B build-docs -G Ninja -DEDEN_BUILD_ENGINE=OFF -DEDEN_BUILD_DOCS=ON
+   cmake -B build-docs -G Ninja -DEDEN_BUILD_LIBRARY=OFF -DEDEN_BUILD_DEMO=OFF -DEDEN_BUILD_TESTS=OFF -DEDEN_BUILD_DOCS=ON
    cmake --build build-docs --target Sphinx
 
 CI builds and, on pushes to ``main``, publishes these docs to GitHub
 Pages via ``.github/workflows/docs.yml`` using the same
-``EDEN_BUILD_ENGINE=OFF`` path.
+``EDEN_BUILD_LIBRARY=OFF`` path.
