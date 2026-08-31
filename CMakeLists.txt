@@ -50,18 +50,29 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 # Documentation only parses public headers, so a docs-only build deliberately
 # avoids the graphics toolchain and all library/test dependencies.
 if(EDEN_BUILD_LIBRARY)
+    include(FetchContent)
+
+    # FetchContent adds dependencies in this directory's variable scope, so a
+    # parent project's BUILD_SHARED_LIBS value would otherwise decide how
+    # those dependencies are built. Keep that override inside a function:
+    # fetched dependencies see OFF, while the parent cache and directory scope
+    # remain untouched. Packages supplied by the parent are used as-is.
+    function(_eden_fetch_static DEPENDENCY)
+        set(BUILD_SHARED_LIBS OFF)
+        FetchContent_MakeAvailable(${DEPENDENCY})
+    endfunction()
+
     if(NOT TARGET spdlog::spdlog)
         find_package(spdlog CONFIG QUIET)
     endif()
     if(NOT TARGET spdlog::spdlog)
         set(EDEN_SPDLOG_VERSION v1.15.3 CACHE STRING "spdlog version fetched by Eden")
-        include(FetchContent)
         FetchContent_Declare(
             spdlog
             GIT_REPOSITORY https://github.com/gabime/spdlog.git
             GIT_TAG ${EDEN_SPDLOG_VERSION}
         )
-        FetchContent_MakeAvailable(spdlog)
+        _eden_fetch_static(spdlog)
     endif()
 
     if(NOT TARGET SDL2::SDL2 AND NOT TARGET SDL2::SDL2-static)
@@ -69,13 +80,12 @@ if(EDEN_BUILD_LIBRARY)
     endif()
     if(NOT TARGET SDL2::SDL2 AND NOT TARGET SDL2::SDL2-static)
         set(EDEN_SDL2_VERSION release-2.30.10 CACHE STRING "SDL2 version fetched by Eden")
-        include(FetchContent)
         FetchContent_Declare(
             SDL2
             GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
             GIT_TAG ${EDEN_SDL2_VERSION}
         )
-        FetchContent_MakeAvailable(SDL2)
+        _eden_fetch_static(SDL2)
     endif()
 
     # Eden itself is a static library. Prefer SDL's static target when the SDL
@@ -99,13 +109,12 @@ if(EDEN_BUILD_LIBRARY)
     endif()
     if(NOT TARGET EnTT::EnTT)
         set(EDEN_ENTT_VERSION v3.13.1 CACHE STRING "EnTT version fetched by Eden")
-        include(FetchContent)
         FetchContent_Declare(
             EnTT
             GIT_REPOSITORY https://github.com/skypjack/entt.git
             GIT_TAG ${EDEN_ENTT_VERSION}
         )
-        FetchContent_MakeAvailable(EnTT)
+        _eden_fetch_static(EnTT)
     endif()
 
     if(NOT TARGET glm::glm)
@@ -113,13 +122,12 @@ if(EDEN_BUILD_LIBRARY)
     endif()
     if(NOT TARGET glm::glm)
         set(EDEN_GLM_VERSION 1.0.1 CACHE STRING "glm version fetched by Eden")
-        include(FetchContent)
         FetchContent_Declare(
             glm
             GIT_REPOSITORY https://github.com/g-truc/glm.git
             GIT_TAG ${EDEN_GLM_VERSION}
         )
-        FetchContent_MakeAvailable(glm)
+        _eden_fetch_static(glm)
     endif()
 
     # Directory for generated public configuration headers.
@@ -178,13 +186,12 @@ if(EDEN_BUILD_LIBRARY)
         endif()
         if(NOT TARGET GTest::gtest_main)
             set(EDEN_GTEST_VERSION v1.17.0 CACHE STRING "GoogleTest version fetched by Eden")
-            include(FetchContent)
             FetchContent_Declare(
                 GTest
                 GIT_REPOSITORY https://github.com/google/googletest.git
                 GIT_TAG ${EDEN_GTEST_VERSION}
             )
-            FetchContent_MakeAvailable(GTest)
+            _eden_fetch_static(GTest)
         endif()
 
         enable_testing()
