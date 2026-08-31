@@ -70,6 +70,10 @@ FetchContent_MakeAvailable(Eden)
 target_link_libraries(MyApplication PRIVATE Eden::Eden)
 ```
 
+Dependencies fetched by Eden are built statically even when the parent sets
+`BUILD_SHARED_LIBS=ON`; Eden does not change that parent setting. Dependencies
+already provided by the parent project are left unchanged.
+
 Eden's build options are:
 
 | Option | Standalone default | Dependency default | Purpose |
