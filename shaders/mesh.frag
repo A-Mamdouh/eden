@@ -20,9 +20,13 @@ layout(std140, set = 0, binding = 0) uniform FrameUBO
     mat4 proj;
     vec4 cameraPosition;
     vec4 ambientColor;
-    ivec4 lightCount;   // x = count
-    Light lights[16];   // must match Eden::Rendering::kMaxLights
+    uvec4 lightCount;   // x = active entries in the light storage buffer
 } frame;
+
+layout(std430, set = 0, binding = 1) readonly buffer LightBuffer
+{
+    Light lights[];
+} lighting;
 
 layout(set = 1, binding = 0) uniform sampler2D baseColorTex;
 layout(set = 2, binding = 0) uniform sampler2D metallicRoughnessTex;
@@ -88,10 +92,9 @@ void main()
     vec3 F0 = mix(vec3(0.04), albedo, metallic);
 
     vec3 Lo = vec3(0.0);
-    int count = min(frame.lightCount.x, 16);
-    for (int i = 0; i < count; ++i)
+    for (uint i = 0; i < frame.lightCount.x; ++i)
     {
-        Light light = frame.lights[i];
+        Light light = lighting.lights[i];
 
         vec3 L;
         float attenuation = 1.0;

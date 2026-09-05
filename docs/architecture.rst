@@ -235,7 +235,8 @@ render undistorted regardless of window size.
 
 Unlike ``Camera``, a ``Light`` component has no position/direction fields
 of its own -- RenderSystem collects every ``Light``/``WorldTransform`` pair
-in the scene each frame (up to ``Rendering::kMaxLights``) and reads a
+in the scene each frame (up to ``render.graphics.maxLights``, or all lights
+when it is 0) and reads a
 Directional light's travel direction, or a Point light's position, straight
 out of that entity's ``WorldTransform``, so a light moves/parents for free
 through the same ``Transform``/``EntityHierarchy`` machinery every other
@@ -388,8 +389,9 @@ Known gaps
 - Rendering supports two shading models per ``Material``: flat ``Unlit``
   (texture times vertex color or a flat tint, no lighting) and metallic-
   roughness PBR (Cook-Torrance BRDF) lit by any number of directional/point
-  ``Light`` entities, up to a fixed per-frame cap
-  (``Rendering::kMaxLights``). There's no image-based ambient lighting yet
+  ``Light`` entities, limited by ``render.graphics.maxLights`` (default 16;
+  0 removes the configured cap). Vulkan uses a growable light storage buffer,
+  subject to GPU memory and storage-buffer limits. There's no image-based ambient lighting yet
   -- PBR materials get a single flat ambient constant instead of a real
   environment/irradiance map -- and no spot lights, shadows, or HDR/
   tonemapping.

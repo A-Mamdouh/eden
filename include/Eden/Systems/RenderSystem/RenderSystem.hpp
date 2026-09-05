@@ -114,7 +114,7 @@ class RenderSystem : public ISystem {
   /// by onConfigUpdated() whenever a change can't be applied in place.
   void createRenderer();
   /// Reacts to a ConfigService::update() call: applies window-chrome and
-  /// display changes directly via SDL, routes anti-aliasing/vsync through
+  /// display changes directly via SDL, routes anti-aliasing/vsync/light limits through
   /// renderer_->applySettings(), and falls back to createRenderer() for
   /// anything that needs it (a backend switch recreates both the SDL window
   /// and renderer; validation-layer changes and a backend reporting
@@ -125,7 +125,7 @@ class RenderSystem : public ISystem {
 
   /// Walks the active scene's Renderable+WorldTransform and
   /// Model+WorldTransform entities into a RenderFrame's draw commands, and
-  /// its Light+WorldTransform entities (capped at Rendering::kMaxLights,
+  /// its Light+WorldTransform entities (capped at graphics.maxLights unless 0,
   /// extras dropped with a warning) into the frame's light list. @return A
   /// frame with just the clear color and no draw commands/lights if
   /// there's no active scene.

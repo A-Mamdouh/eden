@@ -91,10 +91,12 @@ void RenderSystem::createWindow() {
 void RenderSystem::createRenderer() {
   renderer_.reset();
 
-  const RenderSettings settings{renderConfig_.graphics.antiAliasing, renderConfig_.display.vsync};
+  const RenderSettings settings{renderConfig_.graphics.antiAliasing, renderConfig_.display.vsync,
+                                renderConfig_.graphics.maxLights};
   switch (renderConfig_.backend) {
   case Config::Rendering::RendererBackend::Null:
     renderer_ = std::make_unique<NullRenderer>();
+    renderer_->applySettings(settings);
     break;
   case Config::Rendering::RendererBackend::Vulkan:
   default:
@@ -173,8 +175,10 @@ void RenderSystem::onConfigUpdated(const Events::ConfigUpdatedEvent &event) {
   }
 
   if (newConfig.graphics.antiAliasing != oldConfig.graphics.antiAliasing ||
-      newConfig.display.vsync != oldConfig.display.vsync) {
-    const RenderSettings settings{newConfig.graphics.antiAliasing, newConfig.display.vsync};
+      newConfig.display.vsync != oldConfig.display.vsync ||
+      newConfig.graphics.maxLights != oldConfig.graphics.maxLights) {
+    const RenderSettings settings{newConfig.graphics.antiAliasing, newConfig.display.vsync,
+                                  newConfig.graphics.maxLights};
     if (renderer_ && renderer_->applySettings(settings) == ApplyResult::RequiresRecreate) {
       renderConfig_ = newConfig;
       createRenderer();
@@ -369,8 +373,9 @@ RenderFrame RenderSystem::buildFrameFromScene() const {
   }
 
   for (const auto entity : registry.view<Light, WorldTransform>()) {
-    if (frame.lights.size() >= kMaxLights) {
-      spdlog::warn("Scene has more than {} lights; extras are ignored this frame", kMaxLights);
+    if (renderConfig_.graphics.maxLights != 0 &&
+        frame.lights.size() >= renderConfig_.graphics.maxLights) {
+      spdlog::warn("Scene has more than {} lights; extras are ignored this frame", renderConfig_.graphics.maxLights);
       break;
     }
     const auto &light = registry.get<Light>(entity);

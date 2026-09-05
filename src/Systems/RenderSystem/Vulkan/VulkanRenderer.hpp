@@ -3,6 +3,7 @@
 #include "Eden/Systems/RenderSystem/Renderer.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -13,7 +14,7 @@ struct SDL_Window;
 namespace Eden::Rendering {
 
 /// Vulkan implementation of the Renderer contract. Single frame in
-/// flight (one command buffer, one fence), host-visible/coherent memory
+/// flight (one active command buffer, one fence), host-visible/coherent memory
 /// for all mesh buffers -- no staging buffers or async transfer, which
 /// keeps this simple but means large uploads block the calling thread.
 class VulkanRenderer final : public Renderer {
@@ -26,7 +27,7 @@ public:
     /// Requests the VK_LAYER_KHRONOS_validation layer; silently disabled
     /// with a warning if it isn't installed.
     bool enableValidationLayers{false};
-    /// Anti-aliasing/vsync to build the pipeline and swapchain with;
+    /// Initial anti-aliasing/vsync/light limit;
     /// clamped against the picked device's actual limits, same as any
     /// later applySettings() call.
     RenderSettings initialSettings{};
@@ -45,11 +46,50 @@ public:
   void destroyTexture(TextureHandle handle) override;
 
   void renderFrame(const RenderFrame &frame) override;
+
   void requestResize(std::uint32_t width, std::uint32_t height) override;
   ApplyResult applySettings(const RenderSettings &settings) override;
   RendererCapabilities queryCapabilities() const override;
 
 private:
+  /// One acquired swapchain image and the command buffer shared by all passes.
+  struct FrameContext {
+    std::uint32_t imageIndex{0};
+    vk::CommandBuffer commandBuffer{};
+  };
+
+  /// Scene-owned resources, rebuilt together when the swapchain changes.
+  /// Swapchain image views and shared descriptors are borrowed from the renderer.
+  struct SceneRenderPass {
+    vk::RenderPass renderPass{};
+    vk::PipelineLayout pipelineLayout{};
+    vk::Pipeline pipeline{};
+    /// Missing shaders leave a valid clear-only pass.
+    bool pipelineReady{false};
+    std::vector<vk::Framebuffer> framebuffers{};
+
+    vk::Format depthFormat{};
+    vk::Image depthImage{};
+    vk::DeviceMemory depthMemory{};
+    vk::ImageView depthView{};
+
+    /// Multisampled color attachment; null when anti-aliasing is off.
+    vk::Image colorImage{};
+    vk::DeviceMemory colorMemory{};
+    vk::ImageView colorView{};
+  };
+
+  /// Waits/acquires and begins recording; nullopt skips the rest of the frame.
+  std::optional<FrameContext> beginFrame();
+  /// Uploads camera data and capped lights once, growing the light buffer as
+  /// needed after the previous frame has completed.
+  void prepareFrameResources(const RenderFrame &frame);
+  /// Records only this pass; the enclosing command buffer stays open for others.
+  void recordScenePass(const SceneRenderPass &pass, const RenderFrame &frame,
+                       const FrameContext &context);
+  /// Ends recording, submits all passes together, and presents the image.
+  void endFrame(const FrameContext &context);
+
   /// GPU-side storage for one createMesh() call. `alive` and
   /// `generation` implement the same slot-reuse scheme as MeshHandle.
   struct GpuMesh {
@@ -97,21 +137,24 @@ private:
   void createSwapchain();
   /// Creates one image view per entry in swapchainImages_.
   void createImageViews();
-  /// @return A depthFormat_-eligible format supported by physicalDevice_
+  /// Creates a complete scene pass using the current swapchain and settings.
+  /// The caller must ensure previous GPU uses have completed before rebuilding.
+  void createScenePass(SceneRenderPass &pass);
+  /// Releases a complete or partially created pass and resets all its state.
+  /// The caller must ensure previous GPU uses have completed.
+  void destroyScenePass(SceneRenderPass &pass);
+  /// @return A depth format supported by physicalDevice_
   ///         for optimal-tiling depth-stencil attachments; throws if none is.
   vk::Format findDepthFormat() const;
-  /// Creates depthImage_/depthImageMemory_/depthImageView_, sized to
-  /// swapchainExtent_. Device-local (not host-visible): never written
-  /// from the CPU, only cleared/tested by the GPU each frame.
-  void createDepthResources();
-  /// Creates colorImage_/colorImageMemory_/colorImageView_, the
-  /// multisampled color target the render pass resolves into the
-  /// swapchain image. No-ops (leaves them null) when sampleCount() is 1,
-  /// i.e. anti-aliasing is off.
-  void createColorResources();
-  /// Creates renderPass_: color + depth attachments, plus a resolve
+  /// Creates the pass's depth attachment, sized to swapchainExtent_.
+  /// Device-local: only cleared/tested by the GPU each frame.
+  void createDepthResources(SceneRenderPass &pass);
+  /// Creates the pass's multisampled color target, resolved into the swapchain
+  /// image. Leaves the handles null when sampleCount() is 1 (anti-aliasing off).
+  void createColorResources(SceneRenderPass &pass);
+  /// Creates the scene render pass: color + depth attachments, plus a resolve
   /// attachment when sampleCount() > 1.
-  void createRenderPass();
+  void createRenderPass(SceneRenderPass &pass);
   /// Creates descriptorSetLayout_: one combined-image-sampler binding,
   /// fragment stage, matching `layout(set = N, binding = 0) uniform
   /// sampler2D` in mesh.frag -- reused at three different pipeline-layout
@@ -132,41 +175,34 @@ private:
   /// emissive): `sampled * factor` is multiplicative-identity-safe for
   /// each of them, so one shared white texture needs no per-role variant.
   void createDefaultTexture();
-  /// Creates frameDescriptorSetLayout_: one uniform-buffer binding, both
-  /// vertex and fragment stages (view/proj feed the former, everything
-  /// else -- camera position, ambient, lights -- feeds the latter),
-  /// matching `layout(set = 0, binding = 0) uniform FrameUBO` in both
-  /// mesh.vert and mesh.frag.
+  /// Creates set 0: camera/ambient/count UBO at binding 0 (vertex + fragment),
+  /// and a runtime-sized light storage buffer at binding 1 (fragment only).
   void createFrameDescriptorSetLayout();
   /// Allocates frameUniformBuffer_/frameUniformBufferMemory_, sized for
   /// one FrameUBO; host-visible/coherent like every other buffer this
   /// renderer creates (see createBuffer()). Contents are (re)written every
-  /// frame by updateFrameUniformBuffer(), never resized.
+  /// frame by prepareFrameResources(), never resized.
   void createFrameUniformBuffer();
+  /// Grows the light storage buffer geometrically and updates its descriptor.
+  /// Keeps at least one entry allocated for an empty scene. Requires previous
+  /// frame completion; throws if the requested data exceeds the device range.
+  void ensureLightBufferCapacity(std::size_t lightCount);
   /// Creates frameDescriptorPool_, sized for exactly the one set
   /// frameDescriptorSet_ needs.
   void createFrameDescriptorPool();
-  /// Allocates frameDescriptorSet_ and points it at frameUniformBuffer_
-  /// once; only the buffer's contents change per frame afterward (see
-  /// updateFrameUniformBuffer()), never the descriptor set's binding.
+  /// Allocates frameDescriptorSet_ and binds the uniform and light buffers.
   void createFrameDescriptorSet();
-  /// Packs `frame`'s camera/ambient/lights into a FrameUBO and uploads it
-  /// to frameUniformBuffer_. Called once per frame, before the draw loop,
-  /// from recordCommandBuffer() -- safe without per-frame-in-flight
-  /// duplication because renderFrame() already waits on inFlightFence_
-  /// (i.e. the previous frame's GPU work is done) before recording begins.
-  void updateFrameUniformBuffer(const RenderFrame &frame) const;
-  /// (Re)builds the mesh pipeline from the precompiled
-  /// mesh.vert/frag SPIR-V under EDEN_SHADER_DIR. Destroys any
-  /// existing pipeline/layout first, so it's safe to call again on
-  /// swapchain recreation. Leaves pipelineReady_ false (not an error) if
-  /// the shader binaries can't be loaded.
-  void createGraphicsPipeline();
+  /// Refreshes buffer bindings after creation or light-buffer growth.
+  void updateFrameDescriptorSet();
+  /// Builds the mesh pipeline from mesh.vert/frag SPIR-V under EDEN_SHADER_DIR.
+  /// Called for an empty pass by createScenePass(). Leaves pipelineReady false
+  /// (not an error) if the shader binaries can't be loaded.
+  void createGraphicsPipeline(SceneRenderPass &pass);
   /// Creates one framebuffer per entry in swapchainImageViews_.
-  void createFramebuffers();
+  void createFramebuffers(SceneRenderPass &pass);
   /// Creates commandPool_ for the graphics queue family.
   void createCommandPool();
-  /// (Re)allocates one primary command buffer per swapchainFramebuffers_ entry.
+  /// (Re)allocates one primary command buffer per swapchainImages_ entry.
   void allocateCommandBuffers();
   /// Creates imageAvailableSemaphore_, inFlightFence_, and the
   /// per-swapchain-image renderFinishedSemaphores_.
@@ -176,17 +212,13 @@ private:
   void createRenderFinishedSemaphores();
   void destroyRenderFinishedSemaphores();
 
-  /// Destroys the swapchain and everything sized by its image count
-  /// (image views, render pass, framebuffers); safe to call repeatedly.
+  /// Destroys the scene pass, command buffers, and swapchain images/views.
+  /// Requires an idle device; safe to call repeatedly.
   void cleanupSwapchain();
   /// Waits out a minimized/zero-size window, then rebuilds every
   /// swapchain-dependent object (swapchain, views, render pass,
   /// pipeline, framebuffers, command buffers, per-image semaphores).
   void recreateSwapchain();
-  /// Records the render pass and every frame.commands draw into
-  /// commandBuffer for framebuffer imageIndex.
-  void recordCommandBuffer(vk::CommandBuffer commandBuffer, std::uint32_t imageIndex,
-                           const RenderFrame &frame);
 
   /// @return Index of a physicalDevice_ memory type matching both
   ///         `typeFilter` (a bitmask from a memory-requirements query)
@@ -217,8 +249,8 @@ private:
   /// @param filename Shader binary name relative to EDEN_SHADER_DIR.
   /// @return SPIR-V words, or empty on any I/O failure (logged, not thrown).
   std::vector<std::uint32_t> loadShaderBinary(const std::string &filename) const;
-  /// Wraps precompiled SPIR-V `code` in a vk::ShaderModule; caller destroys it.
-  vk::ShaderModule createShaderModule(const std::vector<std::uint32_t> &code) const;
+  /// Wraps precompiled SPIR-V `code` in an automatically released shader module.
+  vk::UniqueShaderModule createShaderModule(const std::vector<std::uint32_t> &code) const;
 
   /// @return currentSettings_.antiAliasing translated to a sample count
   ///         and clamped to maxSampleCount_ -- the single source of truth
@@ -238,8 +270,7 @@ private:
   /// next renderFrame().
   bool framebufferResized_{false};
 
-  /// Live anti-aliasing/vsync request; sampleCount() and createSwapchain()
-  /// both read this. Updated by applySettings().
+  /// Live anti-aliasing/vsync/light limit. Updated by applySettings().
   RenderSettings currentSettings_{};
   /// Highest MSAA sample count physicalDevice_ supports for both color and
   /// depth attachments, capped at e8 (AntiAliasing's own ceiling); set once
@@ -259,19 +290,7 @@ private:
   std::vector<vk::Image> swapchainImages_{};
   std::vector<vk::ImageView> swapchainImageViews_{};
 
-  vk::RenderPass renderPass_{};
-  std::vector<vk::Framebuffer> swapchainFramebuffers_{};
-
-  vk::Format depthFormat_{};
-  vk::Image depthImage_{};
-  vk::DeviceMemory depthImageMemory_{};
-  vk::ImageView depthImageView_{};
-
-  /// The multisampled color attachment the render pass resolves into the
-  /// swapchain image; null when sampleCount() is 1 (anti-aliasing off).
-  vk::Image colorImage_{};
-  vk::DeviceMemory colorImageMemory_{};
-  vk::ImageView colorImageView_{};
+  SceneRenderPass scenePass_{};
 
   vk::DescriptorSetLayout descriptorSetLayout_{};
   vk::Sampler textureSampler_{};
@@ -279,26 +298,22 @@ private:
   // textures come and go.
   vk::DescriptorPool descriptorPool_{};
 
-  /// Set 0's layout (camera/ambient/lights UBO), the buffer backing it,
-  /// and the one descriptor set bound from it every frame. Created once in
-  /// initVulkan(), destroyed once in the destructor -- not swapchain-sized
-  /// (unlike descriptorSetLayout_'s per-texture sets, this isn't tied to
-  /// swapchain image count or format), so cleanupSwapchain()/
-  /// recreateSwapchain() never touch these.
+  /// Shared frame descriptors and camera/ambient/count UBO. Independent of
+  /// the swapchain, as is the growable light storage buffer below.
   vk::DescriptorSetLayout frameDescriptorSetLayout_{};
   vk::DescriptorPool frameDescriptorPool_{};
   vk::DescriptorSet frameDescriptorSet_{};
   vk::Buffer frameUniformBuffer_{};
   vk::DeviceMemory frameUniformBufferMemory_{};
 
-  vk::PipelineLayout pipelineLayout_{};
-  vk::Pipeline graphicsPipeline_{};
-  /// False if shader loading failed; renderFrame() then clears the
-  /// screen but skips drawing (rather than crashing).
-  bool pipelineReady_{false};
+  vk::Buffer lightBuffer_{};
+  vk::DeviceMemory lightBufferMemory_{};
+  std::size_t lightBufferCapacity_{0};
+  /// Physical device's maxStorageBufferRange; checked before allocation.
+  vk::DeviceSize maxLightBufferSize_{0};
 
   vk::CommandPool commandPool_{};
-  /// Indexed by swapchain image index, like swapchainFramebuffers_.
+  /// Indexed by swapchain image index; each buffer records all passes.
   std::vector<vk::CommandBuffer> commandBuffers_{};
 
   vk::Semaphore imageAvailableSemaphore_{};
@@ -319,7 +334,7 @@ private:
   // Same slot+generation scheme, for textures.
   std::vector<GpuTexture> textures_{};
   std::vector<std::uint32_t> freeTextureSlots_{};
-  /// 1x1 white texture created by createDefaultTexture(); recordCommandBuffer()
+  /// 1x1 white texture created by createDefaultTexture(); recordScenePass()
   /// falls back to this when a DrawCommand's texture handle doesn't resolve.
   TextureHandle defaultTexture_{};
 };

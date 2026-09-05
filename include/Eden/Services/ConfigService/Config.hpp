@@ -54,6 +54,9 @@ struct DisplaySettings {
 struct GraphicsSettings {
   /// Anti-aliasing level; see Renderer::applySettings().
   Eden::Rendering::AntiAliasing antiAliasing{Eden::Rendering::AntiAliasing::None};
+  /// Maximum lights per frame; 0 removes the configured cap. GPU memory and
+  /// storage-buffer limits still apply. Changes take effect on the next frame.
+  std::uint32_t maxLights{16};
 };
 
 /// Rendering backend parameters, owned by RenderSystem -- everything

@@ -3,6 +3,8 @@
 #include "Eden/Services/EventService/EventService.hpp"
 #include "Eden/Systems/CommonSystemEvents.hpp"
 
+#include <stdexcept>
+
 namespace Eden {
 
 void ISystem::init(std::weak_ptr<Services::EventService> eventService) {
@@ -15,7 +17,7 @@ void ISystem::init(std::weak_ptr<Services::EventService> eventService) {
 Services::EventService *ISystem::getEventService() {
   const auto es = eventService_.lock();
   if (!es) {
-    // TODO: panic
+    throw std::runtime_error("ISystem's EventService is unavailable");
   }
   return es.get();
 }

@@ -10,21 +10,13 @@ layout(location = 1) out vec3 fragWorldNormal;
 layout(location = 2) out vec3 fragColor;
 layout(location = 3) out vec2 fragUV;
 
-struct Light
-{
-    vec4 positionOrDirection; // xyz; w = 0 (directional) / 1 (point)
-    vec4 colorIntensity;      // rgb = color, a = intensity
-    vec4 params;              // x = range, yzw reserved
-};
-
 layout(std140, set = 0, binding = 0) uniform FrameUBO
 {
     mat4 view;
     mat4 proj;
     vec4 cameraPosition;
     vec4 ambientColor;
-    ivec4 lightCount;   // x = count
-    Light lights[16];   // must match Eden::Rendering::kMaxLights
+    uvec4 lightCount;   // x = active entries in the light storage buffer
 } frame;
 
 layout(push_constant) uniform PushConstants

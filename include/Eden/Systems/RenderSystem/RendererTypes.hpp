@@ -111,13 +111,6 @@ enum class ShadingModel : std::uint8_t {
 /// scene-facing component this is collected from.
 enum class LightType : std::uint8_t { Directional, Point };
 
-/// Upper bound on lights collected into one RenderFrame. Bounds
-/// worst-case per-fragment shading cost (a plain loop, no
-/// tiling/clustering), not memory. The Vulkan backend's UBO array and
-/// the shaders' light array size must be kept in sync with this by
-/// hand -- no shared C++/GLSL constant mechanism exists in this codebase.
-inline constexpr std::size_t kMaxLights = 16;
-
 /// One light's worth of shading data, resolved from a
 /// Rendering::Components::Light + WorldTransform pair.
 struct LightDesc {
@@ -179,7 +172,7 @@ struct RenderFrame {
   /// visibility -- a placeholder for real image-based ambient lighting,
   /// which this engine doesn't have yet. rgb = color, a = intensity.
   Color ambientColor{0.03f, 0.03f, 0.035f, 1.0f};
-  /// Lights affecting this frame's PBR draws, capped at kMaxLights.
+  /// Lights affecting this frame's PBR draws, subject to RenderSettings::maxLights.
   std::vector<LightDesc> lights{};
   /// Draw commands in submission order; backends may reorder for
   /// efficiency as long as the visual result is equivalent.
@@ -202,6 +195,9 @@ struct RenderSettings {
   AntiAliasing antiAliasing{AntiAliasing::MSAA2x};
   /// Present-mode preference.
   VsyncMode vsync{VsyncMode::On};
+  /// Maximum lights to use per frame; 0 means no configured cap.
+  /// The backend's available memory and storage-buffer limits still apply.
+  std::uint32_t maxLights{16};
 };
 
 /// What a Renderer backend can actually do on the current hardware; a

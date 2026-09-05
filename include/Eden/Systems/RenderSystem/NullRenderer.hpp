@@ -33,8 +33,8 @@ public:
   /// @return Number of renderFrame() calls so far. Test-only inspection
   ///         surface, not part of the Renderer contract.
   std::size_t frameCount() const noexcept { return frameCount_; }
-  /// @return The RenderFrame passed to the most recent renderFrame()
-  ///         call. Only meaningful once frameCount() > 0.
+  /// @return The most recent frame with the configured light cap applied.
+  ///         Only meaningful once frameCount() > 0.
   const RenderFrame &lastFrame() const noexcept { return lastFrame_; }
   /// @return Width passed to the most recent requestResize() call, or 0
   ///         if it's never been called.

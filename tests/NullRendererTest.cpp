@@ -123,3 +123,39 @@ TEST(NullRendererTest, SatisfiesRendererContractPolymorphically) {
   RenderFrame frame{};
   EXPECT_NO_THROW(renderer->renderFrame(frame));
 }
+
+TEST(NullRendererTest, ConfiguredLightLimitPreservesOrderAndInputFrame) {
+  NullRenderer renderer;
+  renderer.applySettings(RenderSettings{.maxLights = 3});
+  RenderFrame frame{};
+  for (int i = 0; i < 40; ++i) {
+    frame.lights.push_back(LightDesc{.intensity = static_cast<float>(i)});
+  }
+
+  renderer.renderFrame(frame);
+
+  ASSERT_EQ(renderer.lastFrame().lights.size(), 3u);
+  EXPECT_FLOAT_EQ(renderer.lastFrame().lights.back().intensity, 2.0f);
+  EXPECT_EQ(frame.lights.size(), 40u);
+}
+
+TEST(NullRendererTest, LightLimitCanSwitchBetweenFiniteAndUnlimitedAtRuntime) {
+  NullRenderer renderer;
+  RenderFrame frame{};
+  frame.lights.resize(40);
+
+  renderer.renderFrame(frame);
+  EXPECT_EQ(renderer.lastFrame().lights.size(), 16u);
+
+  renderer.applySettings(RenderSettings{.maxLights = 0});
+  renderer.renderFrame(frame);
+  EXPECT_EQ(renderer.lastFrame().lights.size(), 40u);
+
+  renderer.applySettings(RenderSettings{.maxLights = 24});
+  renderer.renderFrame(frame);
+  EXPECT_EQ(renderer.lastFrame().lights.size(), 24u);
+
+  frame.lights.clear();
+  renderer.renderFrame(frame);
+  EXPECT_TRUE(renderer.lastFrame().lights.empty());
+}

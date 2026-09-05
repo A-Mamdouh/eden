@@ -51,6 +51,16 @@ cmake --build build
 ctest --test-dir build --output-on-failure   # run the test suite
 ```
 
+The light limit is configurable at startup and through `ConfigService::update()`:
+
+```cpp
+Eden::AppConfig config;
+config.engine.render.graphics.maxLights = 0; // Unlimited; default is 16.
+```
+
+A positive value caps the lights used per frame. With `0`, the Vulkan light buffer
+grows with the scene; GPU memory and storage-buffer limits still apply.
+
 ### Using Eden from another CMake project
 
 Eden exposes the namespaced target `Eden::Eden`. When Eden is added as a

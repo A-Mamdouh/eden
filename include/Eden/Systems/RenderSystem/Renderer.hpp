@@ -47,7 +47,7 @@ public:
   /// @param height New framebuffer height in pixels.
   virtual void requestResize(std::uint32_t width, std::uint32_t height) = 0;
 
-  /// Requests a new anti-aliasing/vsync configuration.
+  /// Requests a new anti-aliasing/vsync/light-limit configuration.
   /// @param settings Requested settings; a value the hardware can't
   ///        satisfy (e.g. an unsupported MSAA level) is clamped rather
   ///        than rejected.

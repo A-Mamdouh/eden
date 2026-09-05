@@ -82,6 +82,9 @@ void NullRenderer::destroyTexture(TextureHandle handle) {
 
 void NullRenderer::renderFrame(const RenderFrame &frame) {
   lastFrame_ = frame;
+  if (settings_.maxLights != 0 && lastFrame_.lights.size() > settings_.maxLights) {
+    lastFrame_.lights.resize(settings_.maxLights);
+  }
   ++frameCount_;
 }
 
