@@ -3,17 +3,45 @@
 #include "EdenTestBase.hpp"
 
 #include <chrono>
+#include <stdexcept>
 #include <thread>
 
 using namespace Eden::Services;
 
 class ClockServiceTest : public EdenTest::EdenTestBase {};
 
+namespace {
+
+class FailingService : public Eden::IService {
+public:
+  std::string getName() override { return "Failing Test Service"; }
+
+private:
+  void onInit() override { throw std::runtime_error{"Expected initialization failure"}; }
+};
+
+} // namespace
+
 TEST_F(ClockServiceTest, TickReturnsNonNegativeDelta) {
   ClockService clock;
+
+  EXPECT_FALSE(clock.isInitialized());
+  EXPECT_THROW(clock.tick(), std::logic_error);
+
   clock.init(eventService);
 
+  EXPECT_TRUE(clock.isInitialized());
+  const auto registeredClockLogger = spdlog::get(clock.getName());
+  EXPECT_THROW(clock.init(eventService), std::logic_error);
+  EXPECT_TRUE(clock.isInitialized());
+  EXPECT_EQ(spdlog::get(clock.getName()), registeredClockLogger);
+
   EXPECT_GE(clock.tick(), 0.0);
+
+  FailingService failingService;
+  EXPECT_THROW(failingService.init(eventService), std::runtime_error);
+  EXPECT_FALSE(failingService.isInitialized());
+  EXPECT_EQ(spdlog::get(failingService.getName()), nullptr);
 }
 
 TEST_F(ClockServiceTest, PausedTickReturnsZero) {

@@ -195,6 +195,8 @@ void RenderSystem::onConfigUpdated(const Events::ConfigUpdatedEvent &event) {
 }
 
 MeshHandle RenderSystem::createMesh(const MeshDesc &desc) {
+  requireInitialized();
+
   const MeshHandle handle = renderer_->createMesh(desc);
   if (handle.valid()) {
     const std::uint32_t index = handle.id - 1;
@@ -206,13 +208,20 @@ MeshHandle RenderSystem::createMesh(const MeshDesc &desc) {
   return handle;
 }
 
-void RenderSystem::destroyMesh(MeshHandle handle) { renderer_->destroyMesh(handle); }
+void RenderSystem::destroyMesh(MeshHandle handle) {
+  requireInitialized();
+  renderer_->destroyMesh(handle);
+}
 
 TextureHandle RenderSystem::createTexture(const TextureDesc &desc) {
+  requireInitialized();
   return renderer_->createTexture(desc);
 }
 
-void RenderSystem::destroyTexture(TextureHandle handle) { renderer_->destroyTexture(handle); }
+void RenderSystem::destroyTexture(TextureHandle handle) {
+  requireInitialized();
+  renderer_->destroyTexture(handle);
+}
 
 MaterialHandle RenderSystem::createMaterial(const Material &desc) {
   MaterialSlot slot{};
@@ -252,7 +261,10 @@ void RenderSystem::destroyMaterial(MaterialHandle handle) {
   freeMaterialSlots_.push_back(index);
 }
 
-Model RenderSystem::loadModel(const std::string &path) { return loadGltfModel(path, *this); }
+Model RenderSystem::loadModel(const std::string &path) {
+  requireInitialized();
+  return loadGltfModel(path, *this);
+}
 
 void RenderSystem::setActiveCamera(Entity camera) { activeCamera_ = camera.handle(); }
 
@@ -400,6 +412,8 @@ RenderFrame RenderSystem::buildFrameFromScene() const {
 }
 
 void RenderSystem::update(double /*dt*/) {
+  requireInitialized();
+
   SDL_Event event;
   while (SDL_PollEvent(&event) != 0) {
     switch (event.type) {

@@ -8,18 +8,38 @@
 namespace Eden {
 
 void ISystem::init(std::weak_ptr<Services::EventService> eventService) {
-  logger_ = spdlog::default_logger()->clone(getName());
-  spdlog::initialize_logger(logger_);
+  if (initialized_) {
+    throw std::logic_error("System is already initialized");
+  }
+
   eventService_ = std::move(eventService);
-  const auto maybeEventService = getEventService();
-  if (maybeEventService.has_value())
-  {
-    maybeEventService.value()->publish<Events::SystemStartedEvent>(
-        Events::SystemStartedEvent{.systemName = this->getName(), .system = this});
+  bool loggerRegistered = false;
+  try {
+    const auto defaultLogger = spdlog::default_logger();
+    if (!defaultLogger) {
+      throw std::runtime_error("spdlog default logger is unavailable");
+    }
+
+    logger_ = defaultLogger->clone(getName());
+    spdlog::initialize_logger(logger_);
+    loggerRegistered = true;
+    const auto maybeEventService = getEventService();
+    if (maybeEventService.has_value()) {
+      maybeEventService.value()->publish<Events::SystemStartedEvent>(
+          Events::SystemStartedEvent{.systemName = this->getName(), .system = this});
     } else {
       logger_->warn("Failed to send System Start Event. Event Service not available.");
     }
-  onInit();
+    onInit();
+    initialized_ = true;
+  } catch (...) {
+    if (loggerRegistered) {
+      spdlog::drop(logger_->name());
+    }
+    logger_.reset();
+    eventService_.reset();
+    throw;
+  }
 }
 
 std::optional<Services::EventService *> ISystem::getEventService() {
@@ -28,6 +48,12 @@ std::optional<Services::EventService *> ISystem::getEventService() {
     return std::nullopt;
   }
   return es.get();
+}
+
+void ISystem::requireInitialized() const {
+  if (!initialized_) {
+    throw std::logic_error("System is not initialized");
+  }
 }
 
 ISystem::~ISystem()

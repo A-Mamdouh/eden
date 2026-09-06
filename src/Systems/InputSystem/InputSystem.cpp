@@ -11,6 +11,8 @@ namespace Eden::Systems
 
   void InputSystem::update(double /*dt*/)
   {
+    requireInitialized();
+
     int numKeys = 0;
     const Uint8 *keyboardState = SDL_GetKeyboardState(&numKeys);
 
@@ -48,9 +50,6 @@ namespace Eden::Systems
     SDL_GetMouseState(&posX, &posY);
     state_.mousePosition_ = Vec2{static_cast<float>(posX), static_cast<float>(posY)};
 
-    // Guarded, unlike other systems' publish() calls: InputSystem is
-    // deliberately usable (see InputSystemTest) without init() ever having
-    // been called, since none of its SDL calls above need it either.
     const auto maybeEventService = getEventService();
     if (maybeEventService.has_value())
     {

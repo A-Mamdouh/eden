@@ -7,6 +7,8 @@ namespace Eden::Services {
 void ClockService::onInit() { lastTick_ = Clock::now(); }
 
 double ClockService::tick() {
+  requireInitialized();
+
   auto now = Clock::now();
   std::chrono::duration<double> dt = now - lastTick_;
   lastTick_ = now;
@@ -27,6 +29,8 @@ double ClockService::tick() {
 }
 
 bool ClockService::consumeFixedStep() {
+  requireInitialized();
+
   if (accumulator_ >= clockConfig_.fixedDt) {
     accumulator_ -= clockConfig_.fixedDt;
     simTimeTotal_ += clockConfig_.fixedDt;

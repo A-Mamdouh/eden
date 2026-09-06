@@ -30,6 +30,8 @@ void ScriptSystem::shutdown() {
 }
 
 void ScriptSystem::update(double dt) {
+  requireInitialized();
+
   World::Scene *scene = sceneService_.activeScene();
   if (!scene || !inputState_) {
     return;

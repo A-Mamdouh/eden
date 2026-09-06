@@ -6,6 +6,8 @@ namespace Eden::Services
 {
   void SceneService::loadScene(std::unique_ptr<World::Scene> scene)
   {
+    requireInitialized();
+
     const auto eventService = getEventService();
     if(eventService.has_value()) {
       eventService.value()->publish<Events::SceneLoadedEvent>(

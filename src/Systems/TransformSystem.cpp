@@ -33,6 +33,8 @@ Mat4 computeWorldMatrix(entt::entity entity, entt::registry &registry,
 } // namespace
 
 void TransformSystem::update(double /*dt*/) {
+  requireInitialized();
+
   Scene *scene = sceneService_.activeScene();
   if (!scene) {
     return;

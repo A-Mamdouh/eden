@@ -3,6 +3,8 @@
 namespace Eden::Services {
 
 void JobService::submit(Job job) {
+    requireInitialized();
+
     activeJobs_++;
     {
         std::lock_guard lock(queueMutex_);
@@ -30,17 +32,23 @@ void JobService::workerLoop() {
 
   void JobService::stop()
   {
-    wait();
+    if (isInitialized()) {
+      wait();
+    }
   }
 
   JobService::~JobService()
   {
     // Finish all jobs first
-    wait();
+    if (isInitialized()) {
+      wait();
+    }
   }
 
   void JobService::wait()
   {
+    requireInitialized();
+
     while(activeJobs_ > 0)
     {
       std::this_thread::yield();

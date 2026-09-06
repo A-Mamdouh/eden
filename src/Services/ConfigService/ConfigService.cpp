@@ -5,6 +5,8 @@
 
 namespace Eden::Services {
 void ConfigService::update(const Config::ApplicationConfig &newConfig) {
+  requireInitialized();
+
   const auto eventService = getEventService();
   if(eventService.has_value()) {
     eventService.value()->publish<Events::ConfigUpdatedEvent>(

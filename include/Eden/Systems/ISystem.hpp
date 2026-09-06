@@ -24,6 +24,8 @@ public:
   /// @param eventService Shared event bus, held as a weak reference so
   ///        systems don't extend its lifetime.
   void init(std::weak_ptr<Services::EventService> eventService);
+  /// @return True after init() has completed successfully.
+  bool isInitialized() const noexcept { return initialized_; }
   /// Human-readable name used in engine startup/shutdown logging.
   virtual std::string getName() = 0;
   /// Called once per Engine::run() iteration.
@@ -43,9 +45,12 @@ protected:
   virtual void onInit() = 0;
   /// @return The event bus passed to init(), or nullptr if it has expired.
   std::optional<Services::EventService*> getEventService();
+  /// Throws when an operation requiring init() is used too early.
+  void requireInitialized() const;
   std::shared_ptr<spdlog::logger> logger_;
 private:
   std::weak_ptr<Services::EventService> eventService_;
+  bool initialized_{false};
 };
 
 template <typename T>

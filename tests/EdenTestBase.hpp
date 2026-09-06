@@ -20,17 +20,7 @@ protected:
   }
 
   void TearDown() override {
-    try{
-      auto defaultLogger = spdlog::default_logger();
-
-      spdlog::drop_all();
-
-      if (defaultLogger) {
-          spdlog::set_default_logger(std::move(defaultLogger));
-      }
-    } catch(std::exception) {
-
-    }
+    eventService.reset();
   }
 
   std::shared_ptr<Eden::Services::EventService> eventService;
