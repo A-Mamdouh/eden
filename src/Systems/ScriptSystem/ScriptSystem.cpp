@@ -8,13 +8,23 @@
 namespace Eden::Systems {
 
 void ScriptSystem::onInit() {
-  inputStateListener_ = getEventService()->subscribe<Events::InputStateUpdatedEvent>(
-      [this](const Events::InputStateUpdatedEvent &event) { inputState_ = event.state; });
+  auto eventService = getEventService();
+  if(eventService.has_value()) {
+    inputStateListener_ = eventService.value()->subscribe<Events::InputStateUpdatedEvent>(
+        [this](const Events::InputStateUpdatedEvent &event) { inputState_ = event.state; });
+  } else {
+    logger_->warn("Could not subscribe to input system. Event service not available.");
+  }
 }
 
 void ScriptSystem::shutdown() {
   if (inputStateListener_) {
-    getEventService()->unsubscribe<Events::InputStateUpdatedEvent>(*inputStateListener_);
+    auto eventService = getEventService();
+    if(eventService.has_value()) {
+      eventService.value()->unsubscribe<Events::InputStateUpdatedEvent>(*inputStateListener_);
+    } else {
+      logger_->error("Could not unsubscribe from input system. Event system not available.");
+    }
     inputStateListener_.reset();
   }
 }

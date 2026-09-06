@@ -46,8 +46,13 @@ void RenderSystem::onInit() {
   createWindow();
   createRenderer();
 
-  configListener_ = getEventService()->subscribe<Events::ConfigUpdatedEvent>(
-      [this](const Events::ConfigUpdatedEvent &event) { onConfigUpdated(event); });
+  auto eventService = getEventService();
+  if(eventService.has_value()){
+      configListener_ = eventService.value()->subscribe<Events::ConfigUpdatedEvent>(
+          [this](const Events::ConfigUpdatedEvent &event) { onConfigUpdated(event); });
+  } else {
+    logger_->warn("Could not subscribe to config service. Event service not available");
+  }
 }
 
 void RenderSystem::createWindow() {
@@ -436,7 +441,12 @@ void RenderSystem::update(double /*dt*/) {
 
 void RenderSystem::shutdown() {
   if (configListener_) {
-    getEventService()->unsubscribe<Events::ConfigUpdatedEvent>(*configListener_);
+    auto eventService = getEventService();
+    if(eventService.has_value()) {
+      eventService.value()->unsubscribe<Events::ConfigUpdatedEvent>(*configListener_);
+    } else {
+      logger_->error("Could not unsubscribe from config service. Event service not available");
+    }
     configListener_.reset();
   }
 

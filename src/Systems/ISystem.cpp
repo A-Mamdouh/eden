@@ -8,18 +8,33 @@
 namespace Eden {
 
 void ISystem::init(std::weak_ptr<Services::EventService> eventService) {
+  logger_ = spdlog::default_logger()->clone(getName());
+  spdlog::initialize_logger(logger_);
   eventService_ = std::move(eventService);
-  getEventService()->publish<Events::SystemStartedEvent>(
-      Events::SystemStartedEvent{.systemName = this->getName(), .system = this});
+  const auto maybeEventService = getEventService();
+  if (maybeEventService.has_value())
+  {
+    maybeEventService.value()->publish<Events::SystemStartedEvent>(
+        Events::SystemStartedEvent{.systemName = this->getName(), .system = this});
+    } else {
+      logger_->warn("Failed to send System Start Event. Event Service not available.");
+    }
   onInit();
 }
 
-Services::EventService *ISystem::getEventService() {
+std::optional<Services::EventService *> ISystem::getEventService() {
   const auto es = eventService_.lock();
   if (!es) {
-    throw std::runtime_error("ISystem's EventService is unavailable");
+    return std::nullopt;
   }
   return es.get();
+}
+
+ISystem::~ISystem()
+{
+  if(logger_) {
+    spdlog::drop(logger_->name());
+  }
 }
 
 } // namespace Eden

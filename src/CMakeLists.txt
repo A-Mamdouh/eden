@@ -51,12 +51,12 @@ target_link_libraries(
     PUBLIC
         EnTT::EnTT
         glm::glm
+        spdlog::spdlog
 )
 
 target_link_libraries(
     Eden
     PRIVATE
-        spdlog::spdlog
         ${EDEN_SDL2_TARGET}
         Vulkan::Vulkan
 )

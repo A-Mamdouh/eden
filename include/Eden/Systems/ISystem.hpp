@@ -3,6 +3,8 @@
 #include <memory>
 #include <string>
 #include <type_traits>
+#include <optional>
+#include <spdlog/spdlog.h>
 
 namespace Eden::Services {
 class EventService;
@@ -30,7 +32,7 @@ public:
   /// Called once by Engine during shutdown, in reverse registration order.
   virtual void shutdown() = 0;
 
-  virtual ~ISystem() = default;
+  virtual ~ISystem();
   ISystem(const ISystem &) = delete;
   ISystem &operator=(const ISystem &) = delete;
   ISystem(const ISystem &&) = delete;
@@ -40,7 +42,8 @@ protected:
   /// Derived-class setup, invoked once from init() after eventService_ is set.
   virtual void onInit() = 0;
   /// @return The event bus passed to init(), or nullptr if it has expired.
-  Services::EventService* getEventService();
+  std::optional<Services::EventService*> getEventService();
+  std::shared_ptr<spdlog::logger> logger_;
 private:
   std::weak_ptr<Services::EventService> eventService_;
 };
